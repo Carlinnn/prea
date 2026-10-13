@@ -1,4 +1,6 @@
 logging:
   level: debug
 database:
-  schema: update # creates the missing tables and columns at startup
+  migrations:
+    from_models: true # a model change becomes a migration at startup...
+    on_start: true # ...that is applied right away

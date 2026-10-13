@@ -10,6 +10,11 @@ logging:
 database:
   url: ${DATABASE_URL}
   schema: validate # none | validate | update | create | create-drop
+  migrations:
+    dir: migrations
+    version: semver # semver (0.0.1) | timestamp
+    on_start: false # apply the pending migrations at startup
+    from_models: false # write a migration with the models' diff at startup
 security:
   jwt:
     secret: ${JWT_SECRET} # 32+ bytes: openssl rand -base64 32
