@@ -191,7 +191,7 @@ drop table mig_a;
 	mustRun("create", "b")
 	write("0.0.2_b.sql", "create table mig_b (id int);")
 
-	if out := mustRun("validate"); out != "2 migrations ok\n" {
+	if out := mustRun("validate"); out != "migrations ok: 2\n" {
 		t.Fatalf("validate: %q", out)
 	}
 	if out := mustRun("up", "0.0.1"); !strings.Contains(out, "applied 0.0.1_a") || strings.Contains(out, "0.0.2") {

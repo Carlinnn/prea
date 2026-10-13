@@ -15,6 +15,7 @@ func main() {
 		Commands: []*cli.Command{
 			runCommand(),
 			generateCommand(),
+			migrateCommand(),
 		},
 	}
 

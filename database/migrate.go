@@ -155,7 +155,7 @@ func Command(ctx context.Context, db *pgxpool.Pool, opts Migrations, args []stri
 		}
 		return err
 	case "validate":
-		fmt.Fprintf(out, "%d migrations ok\n", len(migs))
+		fmt.Fprintf(out, "migrations ok: %d\n", len(migs))
 		return nil
 	case "up", "down", "status":
 	default:
