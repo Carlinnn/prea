@@ -1,6 +1,7 @@
 package database
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -133,5 +134,113 @@ drop function f;
 	}
 	if got := string(migration{up: "select 1;"}.goose()); strings.Contains(got, "Down") || strings.Contains(got, "NO TRANSACTION") {
 		t.Fatalf("no down, in a transaction: %s", got)
+	}
+}
+
+func TestMigrateCommands(t *testing.T) {
+	ctx := t.Context()
+	pool := testDB(t)
+	if _, err := pool.Exec(ctx, "drop table if exists prea_migrations, mig_a, mig_b, mig_c; drop function if exists mig_f"); err != nil {
+		t.Fatal(err)
+	}
+	opts := Migrations{Dir: filepath.Join(t.TempDir(), "migrations")}
+	run := func(args ...string) (string, error) {
+		var out strings.Builder
+		err := Command(ctx, pool, opts, args, &out)
+		return out.String(), err
+	}
+	mustRun := func(args ...string) string {
+		t.Helper()
+		out, err := run(args...)
+		if err != nil {
+			t.Fatalf("%v: %v", args, err)
+		}
+		return out
+	}
+	write := func(file, content string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(opts.Dir, file), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tableExists := func(name string) bool {
+		var ok bool
+		pool.QueryRow(ctx, "select to_regclass($1) is not null", name).Scan(&ok)
+		return ok
+	}
+
+	if out := mustRun("status"); !strings.Contains(out, "no migrations") {
+		t.Fatalf("empty dir: %q", out)
+	}
+	if out := mustRun("create", "a"); !strings.Contains(out, "0.0.1_a.sql") {
+		t.Fatalf("create: %q", out)
+	}
+	if _, err := run("status"); err == nil || !strings.Contains(err.Error(), "0.0.1_a.sql: nothing to run") {
+		t.Fatalf("a created file must be filled in: %v", err)
+	}
+	// the whole file runs as written: several statements and a $$ body
+	write("0.0.1_a.sql", `create table mig_a (id int);
+create function mig_f() returns int as $$ select 1; $$ language sql;
+-- prea:down
+drop function mig_f;
+drop table mig_a;
+`)
+	mustRun("create", "b")
+	write("0.0.2_b.sql", "create table mig_b (id int);")
+
+	if out := mustRun("validate"); out != "2 migrations ok\n" {
+		t.Fatalf("validate: %q", out)
+	}
+	if out := mustRun("up", "0.0.1"); !strings.Contains(out, "applied 0.0.1_a") || strings.Contains(out, "0.0.2") {
+		t.Fatalf("up to a version: %q", out)
+	}
+	if out := mustRun("status"); !strings.Contains(out, "0.0.1_a") || !strings.Contains(out, "applied 2") || !strings.Contains(out, "0.0.2_b") || !strings.Contains(out, "pending") {
+		t.Fatalf("status: %q", out)
+	}
+	if out := mustRun("up"); !strings.Contains(out, "applied 0.0.2_b") {
+		t.Fatalf("up: %q", out)
+	}
+	if out := mustRun("up"); out != "no pending migrations\n" {
+		t.Fatalf("up again: %q", out)
+	}
+
+	if _, err := run("down"); err == nil || !strings.Contains(err.Error(), "0.0.2_b has no -- prea:down section") || !tableExists("mig_b") {
+		t.Fatalf("down without a section must refuse and keep the table: %v", err)
+	}
+	write("0.0.2_b.sql", "create table mig_b (id int);\n-- prea:down\ndrop table mig_b;")
+	if out := mustRun("down", "2"); !strings.Contains(out, "undid 0.0.2_b") || !strings.Contains(out, "undid 0.0.1_a") || tableExists("mig_a") || tableExists("mig_b") {
+		t.Fatalf("down 2: %q", out)
+	}
+
+	// a failing migration is rolled back and stops the ones after it
+	write("0.0.3_c.sql", "create table mig_c (id int);\nselect 1/0;")
+	write("0.0.4_d.sql", "select 1;")
+	out, err := run("up")
+	if err == nil || !strings.Contains(err.Error(), "migration 0.0.3_c") || !strings.Contains(err.Error(), "division by zero") || tableExists("mig_c") {
+		t.Fatalf("failing migration: %v", err)
+	}
+	if !strings.Contains(out, "applied 0.0.2_b") || strings.Contains(out, "0.0.4") {
+		t.Fatalf("the ones before it stay applied: %q", out)
+	}
+
+	// two instances starting together apply each migration once (advisory lock)
+	write("0.0.3_c.sql", "create table mig_c (id int);")
+	errs := make(chan error, 2)
+	for range 2 {
+		go func() { _, err := run("up"); errs <- err }()
+	}
+	if err := errors.Join(<-errs, <-errs); err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	pool.QueryRow(ctx, "select count(*) from prea_migrations where version_id > 0").Scan(&n)
+	if n != 4 {
+		t.Fatalf("every migration once: %d rows", n)
+	}
+
+	for _, args := range [][]string{{}, {"create"}, {"create", "Bad-Name"}, {"down", "zero"}, {"up", "9.9.9"}, {"fly"}} {
+		if _, err := run(args...); err == nil {
+			t.Errorf("%v must fail", args)
+		}
 	}
 }

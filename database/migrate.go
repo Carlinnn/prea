@@ -2,8 +2,10 @@ package database
 
 import (
 	"cmp"
+	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -11,8 +13,214 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"testing/fstest"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
+	"github.com/pressly/goose/v3"
+	"github.com/pressly/goose/v3/lock"
 )
+
+// Migrations is the database.migrations block of the config.
+type Migrations struct {
+	Dir        string `yaml:"dir"`         // default migrations
+	Version    string `yaml:"version"`     // semver (default) or timestamp
+	OnStart    bool   `yaml:"on_start"`    // apply the pending migrations at startup
+	FromModels bool   `yaml:"from_models"` // write a migration with the models' diff at startup
+}
+
+func (o Migrations) dir() string { return cmp.Or(o.Dir, "migrations") }
+
+// Command runs a migrations command, the ones of prea migrate:
+//
+//	create <name>   a new file with the next version
+//	up [version]    applies the pending migrations, or up to version
+//	down [n]        undoes the last n applied (default 1)
+//	status          lists every migration: applied or pending
+//	validate        checks the files without touching the database
+//
+// The migrations run with goose, which keeps them in prea_migrations (created
+// before the first one) and holds an advisory lock while they run.
+func Command(ctx context.Context, db *pgxpool.Pool, opts Migrations, args []string, out io.Writer) error {
+	if len(args) == 0 {
+		return errors.New("database: migrate needs a command: create, up, down, status or validate")
+	}
+	migs, err := readMigrations(opts.dir())
+	if err != nil {
+		return err
+	}
+	cmd, args := args[0], args[1:]
+	switch cmd {
+	case "create":
+		if len(args) != 1 || !migrationName.MatchString(args[0]) {
+			return errors.New("database: create needs a snake_case name, e.g. create add_users_active")
+		}
+		path, err := writeMigration(opts, migs, args[0], "-- The SQL to run. Below a \"-- prea:down\" line, the SQL that undoes it.\n")
+		if err == nil {
+			fmt.Fprintln(out, "created", path)
+		}
+		return err
+	case "validate":
+		fmt.Fprintf(out, "%d migrations ok\n", len(migs))
+		return nil
+	case "up", "down", "status":
+	default:
+		return fmt.Errorf("database: unknown migrate command %q", cmd)
+	}
+	if len(migs) == 0 {
+		fmt.Fprintf(out, "no migrations in %s\n", opts.dir())
+		return nil
+	}
+	if db == nil {
+		return errors.New("database: migrations need a database (a *pgxpool.Pool in core.App.Globals)")
+	}
+	r, err := newRunner(db, migs)
+	if err != nil {
+		return err
+	}
+	defer r.p.Close()
+
+	switch cmd {
+	case "up":
+		if len(args) > 1 {
+			return errors.New("database: up takes at most a version")
+		}
+		return r.up(ctx, args, out)
+	case "down":
+		n := 1
+		if len(args) > 0 {
+			if n, err = strconv.Atoi(args[0]); err != nil || n < 1 || len(args) > 1 {
+				return errors.New("database: down takes the number of migrations to undo, e.g. down 2")
+			}
+		}
+		return r.down(ctx, n, out)
+	default:
+		statuses, err := r.p.Status(ctx)
+		if err != nil {
+			return err
+		}
+		for _, s := range statuses {
+			state := "pending"
+			if s.State == goose.StateApplied {
+				state = "applied " + s.AppliedAt.Local().Format(time.DateTime)
+			}
+			fmt.Fprintf(out, "%-40s %s\n", r.byNum[s.Source.Version], state)
+		}
+		return nil
+	}
+}
+
+type runner struct {
+	p     *goose.Provider
+	byNum map[int64]migration
+}
+
+// newRunner hands migs to goose in its format, in memory.
+func newRunner(db *pgxpool.Pool, migs []migration) (*runner, error) {
+	fsys := fstest.MapFS{}
+	byNum := map[int64]migration{}
+	for _, m := range migs {
+		fsys[fmt.Sprintf("%d_%s.sql", m.num, m.name)] = &fstest.MapFile{Data: m.goose()}
+		byNum[m.num] = m
+	}
+	locker, err := lock.NewPostgresSessionLocker()
+	if err != nil {
+		return nil, err
+	}
+	p, err := goose.NewProvider(goose.DialectPostgres, stdlib.OpenDBFromPool(db), fsys,
+		goose.WithTableName("prea_migrations"),
+		goose.WithSessionLocker(locker),
+		goose.WithAllowOutofOrder(true), // a pending migration older than the last applied (after a merge) still runs
+		goose.WithDisableGlobalRegistry(true),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("database: migrations: %w", err)
+	}
+	return &runner{p, byNum}, nil
+}
+
+func (r *runner) up(ctx context.Context, to []string, out io.Writer) error {
+	var results []*goose.MigrationResult
+	var err error
+	if len(to) == 0 {
+		results, err = r.p.Up(ctx)
+	} else {
+		num, _ := versionNumber(to[0])
+		if _, ok := r.byNum[num]; !ok {
+			return fmt.Errorf("database: no migration with version %s", to[0])
+		}
+		results, err = r.p.UpTo(ctx, num)
+	}
+	var partial *goose.PartialError
+	if errors.As(err, &partial) {
+		results = partial.Applied
+		err = fmt.Errorf("database: migration %s: %w", r.byNum[partial.Failed.Source.Version], partial.Err)
+	}
+	for _, res := range results {
+		fmt.Fprintf(out, "applied %s (%s)\n", r.byNum[res.Source.Version], res.Duration.Round(time.Millisecond))
+	}
+	if err == nil && len(results) == 0 {
+		fmt.Fprintln(out, "no pending migrations")
+	}
+	return err
+}
+
+// down undoes the most recently applied migrations, one by one; it stops
+// before one without a -- prea:down section.
+func (r *runner) down(ctx context.Context, n int, out io.Writer) error {
+	for range n {
+		statuses, err := r.p.Status(ctx)
+		if err != nil {
+			return err
+		}
+		var last *goose.MigrationStatus
+		for _, s := range statuses {
+			if s.State == goose.StateApplied && (last == nil || !s.AppliedAt.Before(last.AppliedAt)) {
+				last = s
+			}
+		}
+		if last == nil {
+			fmt.Fprintln(out, "no applied migrations")
+			return nil
+		}
+		m := r.byNum[last.Source.Version]
+		if m.down == "" {
+			return fmt.Errorf("database: migration %s has no -- prea:down section", m)
+		}
+		res, err := r.p.ApplyVersion(ctx, m.num, false)
+		if err != nil {
+			return fmt.Errorf("database: undoing %s: %w", m, err)
+		}
+		fmt.Fprintf(out, "undid %s (%s)\n", m, res.Duration.Round(time.Millisecond))
+	}
+	return nil
+}
+
+// writeMigration creates <dir>/<next version>_<name>.sql with content.
+func writeMigration(opts Migrations, migs []migration, name, content string) (string, error) {
+	version, err := nextVersion(migs, opts.Version, time.Now())
+	if err != nil {
+		return "", err
+	}
+	num, err := versionNumber(version)
+	if err != nil {
+		return "", err
+	}
+	if err := checkMigrations(append(slices.Clone(migs), migration{version: version, name: name, num: num})); err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(opts.dir(), 0o755); err != nil {
+		return "", err
+	}
+	path := filepath.Join(opts.dir(), version+"_"+name+".sql")
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if err != nil {
+		return "", err
+	}
+	_, err = f.WriteString(content)
+	return path, errors.Join(err, f.Close())
+}
 
 // migration is one file of the migrations dir, <version>_<name>.sql. All of
 // it runs on up; what follows a "-- prea:down" line is what down runs.
@@ -90,14 +298,24 @@ func parseMigration(file, content string) (migration, error) {
 	}
 	if loc := downMarker.FindStringIndex(m.up); loc != nil {
 		m.up, m.down = m.up[:loc[0]], m.up[loc[1]:]
-		if strings.TrimSpace(m.down) == "" {
+		if !hasSQL(m.down) {
 			return m, fmt.Errorf("database: migrations/%s: the -- prea:down section is empty", file)
 		}
 	}
-	if strings.TrimSpace(m.up) == "" {
+	if !hasSQL(m.up) {
 		return m, fmt.Errorf("database: migrations/%s: nothing to run", file)
 	}
 	return m, nil
+}
+
+// hasSQL reports whether s has a line that isn't blank or a -- comment.
+func hasSQL(s string) bool {
+	for line := range strings.Lines(s) {
+		if line = strings.TrimSpace(line); line != "" && !strings.HasPrefix(line, "--") {
+			return true
+		}
+	}
+	return false
 }
 
 // versionNumber packs a semver into an integer that sorts like it
