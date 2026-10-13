@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -124,54 +125,158 @@ func exec(ctx context.Context, db *pgxpool.Pool, stmts []string) error {
 // validate compares the tables with their models and reports every
 // difference at once: a missing table or column, a type or a nullability.
 func validate(ctx context.Context, db *pgxpool.Pool, tables []*table) error {
-	type dbColumn struct {
-		Type     string
-		Size     int
-		Nullable bool
+	changes, err := diff(ctx, db, tables)
+	if err != nil {
+		return err
 	}
 	var errs []error
-	for _, t := range tables {
-		rows, err := db.Query(ctx, `
-			select a.attname, ty.typname,
-				case when ty.typname in ('varchar', 'bpchar') and a.atttypmod > 4 then a.atttypmod - 4 else 0 end,
-				not a.attnotnull
-			from pg_attribute a join pg_type ty on ty.oid = a.atttypid
-			where a.attrelid = to_regclass($1) and a.attnum > 0 and not a.attisdropped`, t.quoted())
-		if err != nil {
-			return fmt.Errorf("database: reading %s: %w", t.name, err)
-		}
-		found := map[string]dbColumn{}
-		var name string
-		var col dbColumn
-		_, err = pgx.ForEachRow(rows, []any{&name, &col.Type, &col.Size, &col.Nullable}, func() error {
-			found[name] = col
-			return nil
-		})
-		if err != nil {
-			return fmt.Errorf("database: reading %s: %w", t.name, err)
-		}
-		if len(found) == 0 {
-			errs = append(errs, fmt.Errorf("table %s is missing", t.name))
-			continue
-		}
-		for _, c := range t.columns {
-			got, ok := found[c.name]
-			switch {
-			case !ok:
-				errs = append(errs, fmt.Errorf("%s.%s is missing", t.name, c.name))
-			case got.Type != c.sqlType || got.Size != c.size:
-				errs = append(errs, fmt.Errorf("%s.%s is %s, the model wants %s", t.name, c.name, typeName(got.Type, got.Size), typeName(c.sqlType, c.size)))
-			case got.Nullable && !c.nullable:
-				errs = append(errs, fmt.Errorf("%s.%s is nullable: make the field a pointer, or the column not null", t.name, c.name))
-			case !got.Nullable && c.nullable:
-				errs = append(errs, fmt.Errorf("%s.%s is not null: make the field a value, or the column nullable", t.name, c.name))
-			}
+	for _, c := range changes {
+		if c.check {
+			errs = append(errs, errors.New(c.msg))
 		}
 	}
 	if len(errs) > 0 {
 		return fmt.Errorf("database: the schema doesn't match the models:\n%w", errors.Join(errs...))
 	}
 	return nil
+}
+
+// change is one difference between a model and its table: the statement
+// that brings the table to the model, and the one that undoes it.
+type change struct {
+	msg   string
+	up    string
+	down  string // "" when there's nothing to undo
+	check bool   // validate reports it; indexes and extra columns it doesn't
+}
+
+// diff compares every model with its table in the database.
+func diff(ctx context.Context, db *pgxpool.Pool, tables []*table) ([]change, error) {
+	var changes []change
+	for _, t := range tables {
+		cur, err := introspect(ctx, db, t)
+		if err != nil {
+			return nil, err
+		}
+		changes = append(changes, diffTable(t, cur)...)
+	}
+	return changes, nil
+}
+
+type dbTable struct {
+	columns map[string]dbColumn
+	order   []string // column names, in table order
+	indexes map[string]bool
+}
+
+type dbColumn struct {
+	typ      string // udt_name
+	size     int    // varchar(size)
+	nullable bool
+}
+
+// introspect reads the columns and index names of t's table; nil when the
+// table doesn't exist.
+func introspect(ctx context.Context, db *pgxpool.Pool, t *table) (*dbTable, error) {
+	rows, err := db.Query(ctx, `
+		select a.attname, ty.typname,
+			case when ty.typname in ('varchar', 'bpchar') and a.atttypmod > 4 then a.atttypmod - 4 else 0 end,
+			not a.attnotnull
+		from pg_attribute a join pg_type ty on ty.oid = a.atttypid
+		where a.attrelid = to_regclass($1) and a.attnum > 0 and not a.attisdropped
+		order by a.attnum`, t.quoted())
+	if err != nil {
+		return nil, fmt.Errorf("database: reading %s: %w", t.name, err)
+	}
+	cur := &dbTable{columns: map[string]dbColumn{}, indexes: map[string]bool{}}
+	var name string
+	var col dbColumn
+	if _, err := pgx.ForEachRow(rows, []any{&name, &col.typ, &col.size, &col.nullable}, func() error {
+		cur.columns[name] = col
+		cur.order = append(cur.order, name)
+		return nil
+	}); err != nil {
+		return nil, fmt.Errorf("database: reading %s: %w", t.name, err)
+	}
+	if len(cur.order) == 0 {
+		return nil, nil
+	}
+
+	rows, err = db.Query(ctx, `
+		select i.relname from pg_index x join pg_class i on i.oid = x.indexrelid
+		where x.indrelid = to_regclass($1)`, t.quoted())
+	if err != nil {
+		return nil, fmt.Errorf("database: reading %s: %w", t.name, err)
+	}
+	if _, err := pgx.ForEachRow(rows, []any{&name}, func() error {
+		cur.indexes[name] = true
+		return nil
+	}); err != nil {
+		return nil, fmt.Errorf("database: reading %s: %w", t.name, err)
+	}
+	return cur, nil
+}
+
+// diffTable compares a model with its table (nil when it doesn't exist).
+// Columns the model doesn't have are reported commented out: dropping them
+// loses data, so it's the reviewer's call.
+func diffTable(t *table, cur *dbTable) []change {
+	tbl := t.quoted()
+	var changes []change
+	if cur == nil {
+		if stmt := t.createSchema(); stmt != "" {
+			changes = append(changes, change{up: stmt})
+		}
+		changes = append(changes, change{msg: "table " + t.name + " is missing", up: t.create(), down: "drop table " + tbl, check: true})
+		cur = &dbTable{columns: map[string]dbColumn{}, indexes: map[string]bool{}}
+		for _, c := range t.columns {
+			cur.columns[c.name] = dbColumn{c.sqlType, c.size, c.nullable}
+		}
+	}
+
+	for _, c := range t.columns {
+		got, ok := cur.columns[c.name]
+		col := quote(c.name)
+		alter := "alter table " + tbl + " alter column " + col
+		switch {
+		case !ok:
+			changes = append(changes, change{
+				msg: t.name + "." + c.name + " is missing",
+				up:  "alter table " + tbl + " add column " + c.definition(), down: "alter table " + tbl + " drop column " + col, check: true,
+			})
+		case got.typ != c.sqlType || got.size != c.size:
+			want, was := typeName(c.sqlType, c.size), typeName(got.typ, got.size)
+			changes = append(changes, change{
+				msg: fmt.Sprintf("%s.%s is %s, the model wants %s", t.name, c.name, was, want),
+				up:  alter + " type " + want + " using " + col + "::" + want, down: alter + " type " + was + " using " + col + "::" + was, check: true,
+			})
+		case got.nullable && !c.nullable:
+			changes = append(changes, change{
+				msg: t.name + "." + c.name + " is nullable: make the field a pointer, or the column not null",
+				up:  alter + " set not null", down: alter + " drop not null", check: true,
+			})
+		case !got.nullable && c.nullable:
+			changes = append(changes, change{
+				msg: t.name + "." + c.name + " is not null: make the field a value, or the column nullable",
+				up:  alter + " drop not null", down: alter + " set not null", check: true,
+			})
+		}
+	}
+	for _, name := range cur.order {
+		if !slices.ContainsFunc(t.columns, func(c column) bool { return c.name == name }) {
+			changes = append(changes, change{
+				msg: t.name + "." + name + " is not in the model",
+				up:  "-- " + t.name + "." + name + " is not in the model; to drop it (its data is lost):\n-- alter table " + tbl + " drop column " + quote(name),
+			})
+		}
+	}
+	schema := t.name[:strings.LastIndex(t.name, ".")+1] // "app." or ""
+	for _, i := range t.indexes() {
+		if !cur.indexes[i.name] {
+			changes = append(changes, change{msg: "index " + i.name + " is missing", up: i.sql, down: "drop index " + quoteTable(schema+i.name)})
+		}
+	}
+	return changes
 }
 
 func typeName(typ string, size int) string {

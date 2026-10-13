@@ -13,32 +13,41 @@ import (
 func ddl(tables []*table) []string {
 	var stmts []string
 	for _, t := range tables {
-		if i := strings.LastIndex(t.name, "."); i > 0 {
-			stmt := "create schema if not exists " + quoteTable(t.name[:i])
-			if !slices.Contains(stmts, stmt) {
-				stmts = append(stmts, stmt)
-			}
+		if stmt := t.createSchema(); stmt != "" && !slices.Contains(stmts, stmt) {
+			stmts = append(stmts, stmt)
 		}
 	}
 	for _, t := range tables {
-		defs := make([]string, len(t.columns))
-		for i, c := range t.columns {
-			defs[i] = c.definition()
-		}
-		var keys []string
-		for _, c := range t.pk() {
-			keys = append(keys, quote(c.name))
-		}
-		defs = append(defs, "primary key ("+strings.Join(keys, ", ")+")")
-		stmts = append(stmts, "create table if not exists "+t.quoted()+" (\n\t"+strings.Join(defs, ",\n\t")+"\n)")
-
+		stmts = append(stmts, t.create())
 		for _, c := range t.columns {
 			stmts = append(stmts, "alter table "+t.quoted()+" add column if not exists "+c.definition())
 		}
-		stmts = append(stmts, t.indexes("unique", func(c column) string { return c.unique })...)
-		stmts = append(stmts, t.indexes("", func(c column) string { return c.index })...)
+		for _, i := range t.indexes() {
+			stmts = append(stmts, i.sql)
+		}
 	}
 	return stmts
+}
+
+// createSchema creates the schema of "schema.table"; "" for a bare table.
+func (t *table) createSchema() string {
+	if i := strings.LastIndex(t.name, "."); i > 0 {
+		return "create schema if not exists " + quoteTable(t.name[:i])
+	}
+	return ""
+}
+
+func (t *table) create() string {
+	defs := make([]string, len(t.columns))
+	for i, c := range t.columns {
+		defs[i] = c.definition()
+	}
+	var keys []string
+	for _, c := range t.pk() {
+		keys = append(keys, quote(c.name))
+	}
+	defs = append(defs, "primary key ("+strings.Join(keys, ", ")+")")
+	return "create table if not exists " + t.quoted() + " (\n\t" + strings.Join(defs, ",\n\t") + "\n)"
 }
 
 // drops removes the tables, the referencing ones first.
@@ -78,30 +87,42 @@ func (c column) definition() string {
 	return def
 }
 
-// indexes creates one index per group, in column order: "<table>_<group>_key"
-// for unique, "<table>_<group>_idx" otherwise.
-func (t *table) indexes(kind string, group func(column) string) []string {
-	var order []string
-	cols := map[string][]string{}
-	for _, c := range t.columns {
-		if g := group(c); g != "" {
-			if _, ok := cols[g]; !ok {
-				order = append(order, g)
+type index struct {
+	name string // unquoted, in the table's schema
+	sql  string
+}
+
+// indexes creates one index per group, in column order: the unique ones,
+// "<table>_<group>_key", then the others, "<table>_<group>_idx".
+func (t *table) indexes() []index {
+	var all []index
+	for _, kind := range []string{"unique", ""} {
+		var order []string
+		cols := map[string][]string{}
+		for _, c := range t.columns {
+			g := c.index
+			if kind != "" {
+				g = c.unique
 			}
-			cols[g] = append(cols[g], quote(c.name))
+			if g != "" {
+				if _, ok := cols[g]; !ok {
+					order = append(order, g)
+				}
+				cols[g] = append(cols[g], quote(c.name))
+			}
+		}
+		suffix, create := "_idx", "create index"
+		if kind != "" {
+			suffix, create = "_key", "create unique index"
+		}
+		base := t.name[strings.LastIndex(t.name, ".")+1:]
+		for _, g := range order {
+			name := base + "_" + g + suffix
+			all = append(all, index{name, fmt.Sprintf("%s if not exists %s on %s (%s)",
+				create, quote(name), t.quoted(), strings.Join(cols[g], ", "))})
 		}
 	}
-	suffix := "_idx"
-	if kind != "" {
-		kind, suffix = " "+kind, "_key"
-	}
-	base := t.name[strings.LastIndex(t.name, ".")+1:]
-	stmts := make([]string, len(order))
-	for i, g := range order {
-		stmts[i] = fmt.Sprintf("create%s index if not exists %s on %s (%s)",
-			kind, quote(base+"_"+g+suffix), t.quoted(), strings.Join(cols[g], ", "))
-	}
-	return stmts
+	return all
 }
 
 // ordered sorts tables so each comes after the tables its foreign keys
