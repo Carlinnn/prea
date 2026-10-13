@@ -144,7 +144,7 @@ func TestSyncSchemaChecks(t *testing.T) {
 		{SchemaNone, []any{&invalidRepo{}}, "no primary key"},
 		{SchemaNone, []any{&teamRepo{}, &otherTeams{}}, "table app.teams is mapped by database.team and database.otherTeam"},
 		{SchemaNone, []any{&playerRepo{}}, `fk:"app.teams" is not the table of a repository's model`},
-		{SchemaUpdate, []any{&teamRepo{}}, "*database.teamRepo has no database (DB is nil)"},
+		{SchemaUpdate, []any{&teamRepo{}}, "the repository of database.team has no database (DB is nil)"},
 	} {
 		if _, err := SyncSchema(ctx, tc.mode, tc.comps); err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("%s: got %v, want %q", tc.mode, err, tc.want)

@@ -43,8 +43,44 @@ func SyncSchema(ctx context.Context, mode string, components []any) (drop func(c
 		return drop, fmt.Errorf("database: schema %q is not none, validate, update, create or create-drop", mode)
 	}
 
-	var pools []*pgxpool.Pool
-	tables := map[*pgxpool.Pool][]*table{}
+	pools, tables, err := models(components)
+	if err == nil && mode != SchemaNone && len(tables[nil]) > 0 {
+		err = fmt.Errorf("database: the repository of %v has no database (DB is nil)", tables[nil][0].typ)
+	}
+	if err != nil || mode == SchemaNone {
+		return drop, err
+	}
+
+	var errs []error
+	for _, db := range pools {
+		switch mode {
+		case SchemaValidate:
+			errs = append(errs, validate(ctx, db, tables[db]))
+		case SchemaUpdate:
+			errs = append(errs, exec(ctx, db, ddl(tables[db])))
+		case SchemaCreate, SchemaCreateDrop:
+			errs = append(errs, exec(ctx, db, slices.Concat(drops(tables[db]), ddl(tables[db]))))
+		}
+	}
+	if err := errors.Join(errs...); err != nil {
+		return drop, err
+	}
+	if mode == SchemaCreateDrop {
+		drop = func(ctx context.Context) error {
+			var errs []error
+			for _, db := range pools {
+				errs = append(errs, exec(ctx, db, drops(tables[db])))
+			}
+			return errors.Join(errs...)
+		}
+	}
+	return drop, nil
+}
+
+// models collects the models of the repositories among components, by
+// pool and in foreign key order. Every invalid model is reported at once.
+func models(components []any) (pools []*pgxpool.Pool, tables map[*pgxpool.Pool][]*table, err error) {
+	tables = map[*pgxpool.Pool][]*table{}
 	byName := map[string]*table{}
 	var errs []error
 	for _, component := range components {
@@ -53,10 +89,6 @@ func SyncSchema(ctx context.Context, mode string, components []any) (drop func(c
 			continue
 		}
 		db, typ := r.model()
-		if db == nil && mode != SchemaNone {
-			errs = append(errs, fmt.Errorf("database: %T has no database (DB is nil)", component))
-			continue
-		}
 		t, err := schemaOf(typ)
 		if err != nil {
 			errs = append(errs, err)
@@ -81,33 +113,7 @@ func SyncSchema(ctx context.Context, mode string, components []any) (drop func(c
 		}
 		tables[db] = sorted
 	}
-	if err := errors.Join(errs...); err != nil || mode == SchemaNone {
-		return drop, err
-	}
-
-	for _, db := range pools {
-		switch mode {
-		case SchemaValidate:
-			errs = append(errs, validate(ctx, db, tables[db]))
-		case SchemaUpdate:
-			errs = append(errs, exec(ctx, db, ddl(tables[db])))
-		case SchemaCreate, SchemaCreateDrop:
-			errs = append(errs, exec(ctx, db, slices.Concat(drops(tables[db]), ddl(tables[db]))))
-		}
-	}
-	if err := errors.Join(errs...); err != nil {
-		return drop, err
-	}
-	if mode == SchemaCreateDrop {
-		drop = func(ctx context.Context) error {
-			var errs []error
-			for _, db := range pools {
-				errs = append(errs, exec(ctx, db, drops(tables[db])))
-			}
-			return errors.Join(errs...)
-		}
-	}
-	return drop, nil
+	return pools, tables, errors.Join(errs...)
 }
 
 // exec runs stmts in one transaction: all of them or none.

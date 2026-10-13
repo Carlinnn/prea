@@ -16,6 +16,8 @@ import (
 	"testing/fstest"
 	"time"
 
+	"prea/logger"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
@@ -31,6 +33,97 @@ type Migrations struct {
 }
 
 func (o Migrations) dir() string { return cmp.Or(o.Dir, "migrations") }
+
+// Options is the database block of the config.
+type Options struct {
+	Schema     string     `yaml:"schema"` // see SyncSchema
+	Migrations Migrations `yaml:"migrations"`
+}
+
+// Start prepares the database at startup, in order:
+//  1. migrations.from_models: writes a migration with the diff between the
+//     models and the database, unless migrations are pending;
+//  2. migrations.on_start: applies the pending migrations;
+//  3. schema: syncs the models (see SyncSchema), whose drop it returns.
+//
+// db is the app's main pool, the one the migrations run on.
+func Start(ctx context.Context, db *pgxpool.Pool, opts Options, components []any) (drop func(context.Context) error, err error) {
+	m := opts.Migrations
+	if m.FromModels && slices.Contains([]string{SchemaUpdate, SchemaCreate, SchemaCreateDrop}, opts.Schema) {
+		return nil, fmt.Errorf("database: migrations.from_models writes the models' changes as migrations: use schema none or validate with it, not %s", opts.Schema)
+	}
+	if (m.FromModels || m.OnStart) && db == nil {
+		return nil, errors.New("database: migrations need a database (a *pgxpool.Pool in core.App.Globals)")
+	}
+	if m.FromModels {
+		if err := generateMigration(ctx, db, m, components); err != nil {
+			return nil, err
+		}
+	}
+	if m.OnStart {
+		if err := Command(ctx, db, m, []string{"up"}, logWriter{}); err != nil {
+			return nil, err
+		}
+	}
+	return SyncSchema(ctx, opts.Schema, components)
+}
+
+// generateMigration writes <next version>_models.sql with what the database
+// lacks to match the models. With migrations pending it does nothing: they
+// may already have these changes.
+func generateMigration(ctx context.Context, db *pgxpool.Pool, m Migrations, components []any) error {
+	migs, err := readMigrations(m.dir())
+	if err != nil {
+		return err
+	}
+	if len(migs) > 0 {
+		r, err := newRunner(db, migs)
+		if err != nil {
+			return err
+		}
+		pending, err := r.p.HasPending(ctx)
+		r.p.Close()
+		if err != nil {
+			return err
+		}
+		if pending {
+			logger.Info("database: migrations are pending: apply them before generating one from the models")
+			return nil
+		}
+	}
+
+	// ponytail: only the models on db; repositories on other pools aren't migrated
+	_, tables, err := models(components)
+	if err != nil {
+		return err
+	}
+	changes, err := diff(ctx, db, tables[db])
+	if err != nil {
+		return err
+	}
+	sql, ok := generated(changes)
+	if !ok {
+		for _, c := range changes {
+			logger.Info("database: " + c.msg)
+		}
+		logger.Info("database: the models and the database are in sync")
+		return nil
+	}
+	path, err := writeMigration(m, migs, "models", sql)
+	if err != nil {
+		return err
+	}
+	logger.Success("database: generated a migration from the models: review it before committing", "file", path)
+	return nil
+}
+
+// logWriter logs each line Command writes.
+type logWriter struct{}
+
+func (logWriter) Write(p []byte) (int, error) {
+	logger.Info("database: " + strings.TrimSpace(string(p)))
+	return len(p), nil
+}
 
 // Command runs a migrations command, the ones of prea migrate:
 //

@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"errors"
+	"os"
 	"slices"
 
 	"prea/config"
@@ -10,6 +11,7 @@ import (
 	"prea/di"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // Router is implemented by components that expose HTTP routes.
@@ -23,8 +25,8 @@ type Router interface {
 //
 // Config fills the value:"key" fields, is injectable as *config.Config and
 // picks the modules: one with Profiles loads only under one of them. Its
-// database.schema key applies the repositories' models to the database
-// before Init (see database.SyncSchema).
+// database block (schema and migrations) prepares the database before Init,
+// on the *pgxpool.Pool of Globals (see database.Start).
 //
 // Middlewares (and Security.Middlewares) take functions and components, like
 // Module.Middlewares. Global components live in an implicit "app" module that
@@ -55,17 +57,15 @@ func (a App) Build(ctx context.Context) (engine *gin.Engine, closer func(context
 	if err := c.Load(root); err != nil {
 		return nil, nil, err
 	}
-	var schema string
-	if a.Config != nil {
-		if err := a.Config.Value("database.schema", &schema); err != nil {
-			return nil, nil, err
-		}
+	opts, err := a.database()
+	if err != nil {
+		return nil, nil, err
 	}
 	var components []any
 	for _, m := range c.Modules() {
 		components = append(components, c.Providers(m)...)
 	}
-	drop, err := database.SyncSchema(ctx, schema, components)
+	drop, err := database.Start(ctx, a.pool(), opts, components)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -79,6 +79,37 @@ func (a App) Build(ctx context.Context) (engine *gin.Engine, closer func(context
 		return nil, nil, errors.Join(err, closer(ctx))
 	}
 	return engine, closer, nil
+}
+
+// database reads the database block of the config.
+func (a App) database() (database.Options, error) {
+	var opts database.Options
+	if a.Config == nil {
+		return opts, nil
+	}
+	return opts, a.Config.Value("database", &opts)
+}
+
+// pool is the main database pool: the *pgxpool.Pool of Globals without a
+// name (named ones are wrapped by di.Named); nil when there is none.
+func (a App) pool() *pgxpool.Pool {
+	for _, g := range a.Globals {
+		if db, ok := g.(*pgxpool.Pool); ok {
+			return db
+		}
+	}
+	return nil
+}
+
+// migrate runs a prea migrate command instead of serving: the CLI builds the
+// app and runs it with PREA_MIGRATE="<command> [args]", so the command gets
+// the app's own config and pool.
+func (a App) migrate(ctx context.Context, args []string) error {
+	opts, err := a.database()
+	if err != nil {
+		return err
+	}
+	return database.Command(ctx, a.pool(), opts.Migrations, args, os.Stdout)
 }
 
 func (a App) engine(c *di.Container, root *Module) (*gin.Engine, error) {

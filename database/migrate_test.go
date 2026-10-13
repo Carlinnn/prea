@@ -2,11 +2,14 @@ package database
 
 import (
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func TestParseMigration(t *testing.T) {
@@ -241,6 +244,89 @@ drop table mig_a;
 	for _, args := range [][]string{{}, {"create"}, {"create", "Bad-Name"}, {"down", "zero"}, {"up", "9.9.9"}, {"fly"}} {
 		if _, err := run(args...); err == nil {
 			t.Errorf("%v must fail", args)
+		}
+	}
+}
+
+type note struct {
+	ID   int64  `pk:"" generated:"auto_increment"`
+	Text string `unique:""`
+}
+
+func (note) Table() string { return "notes" }
+
+// note with a new column: the same table, a later version of the model.
+type noteV2 struct {
+	ID    int64  `pk:"" generated:"auto_increment"`
+	Text  string `unique:""`
+	Color *string
+}
+
+func (noteV2) Table() string { return "notes" }
+
+func TestStart(t *testing.T) {
+	ctx := t.Context()
+	pool := testDB(t)
+	if _, err := pool.Exec(ctx, "drop table if exists prea_migrations, notes"); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(t.TempDir(), "migrations")
+	opts := Options{Schema: SchemaValidate, Migrations: Migrations{Dir: dir, FromModels: true, OnStart: true}}
+	start := func(opts Options, model any) {
+		t.Helper()
+		if _, err := Start(ctx, pool, opts, []any{model}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	files := func() []string {
+		entries, _ := os.ReadDir(dir)
+		var names []string
+		for _, e := range entries {
+			names = append(names, e.Name())
+		}
+		return names
+	}
+
+	// an empty database: the whole schema is generated, applied, then validated
+	start(opts, &BaseRepository[note]{DB: pool})
+	if got := files(); len(got) != 1 || got[0] != "0.0.1_models.sql" {
+		t.Fatalf("generated: %v", got)
+	}
+	start(opts, &BaseRepository[note]{DB: pool})
+	if got := files(); len(got) != 1 {
+		t.Fatalf("in sync: no new file: %v", got)
+	}
+
+	// the model changes: the next start generates and applies only the difference
+	start(opts, &BaseRepository[noteV2]{DB: pool})
+	content, _ := os.ReadFile(filepath.Join(dir, "0.0.2_models.sql"))
+	if !strings.Contains(string(content), `alter table "notes" add column "color" text;`) ||
+		!strings.Contains(string(content), "-- prea:down\n"+`alter table "notes" drop column "color";`) {
+		t.Fatalf("0.0.2:\n%s", content)
+	}
+	if err := Command(ctx, pool, opts.Migrations, []string{"down"}, io.Discard); err != nil {
+		t.Fatalf("the generated down undoes it: %v", err)
+	}
+	if _, err := SyncSchema(ctx, SchemaValidate, []any{&BaseRepository[note]{DB: pool}}); err != nil {
+		t.Fatalf("back to the first model: %v", err)
+	}
+
+	// with migrations pending, nothing is generated (they may hold the change)
+	start(Options{Migrations: Migrations{Dir: dir, FromModels: true}}, &BaseRepository[noteV2]{DB: pool})
+	if got := files(); len(got) != 2 {
+		t.Fatalf("pending: no new file: %v", got)
+	}
+
+	for _, tc := range []struct {
+		opts Options
+		db   *pgxpool.Pool
+		want string
+	}{
+		{Options{Schema: SchemaUpdate, Migrations: Migrations{FromModels: true}}, pool, "use schema none or validate with it, not update"},
+		{Options{Migrations: Migrations{OnStart: true}}, nil, "migrations need a database"},
+	} {
+		if _, err := Start(ctx, tc.db, tc.opts, nil); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("got %v, want %q", err, tc.want)
 		}
 	}
 }
