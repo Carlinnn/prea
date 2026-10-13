@@ -34,6 +34,8 @@ type Migrations struct {
 
 func (o Migrations) dir() string { return cmp.Or(o.Dir, "migrations") }
 
+var errNoDatabase = errors.New("database: migrations need a database (a *pgxpool.Pool in core.App.Globals)")
+
 // Options is the database block of the config.
 type Options struct {
 	Schema     string     `yaml:"schema"` // see SyncSchema
@@ -53,7 +55,7 @@ func Start(ctx context.Context, db *pgxpool.Pool, opts Options, components []any
 		return nil, fmt.Errorf("database: migrations.from_models writes the models' changes as migrations: use schema none or validate with it, not %s", opts.Schema)
 	}
 	if (m.FromModels || m.OnStart) && db == nil {
-		return nil, errors.New("database: migrations need a database (a *pgxpool.Pool in core.App.Globals)")
+		return nil, errNoDatabase
 	}
 	if m.FromModels {
 		if err := generateMigration(ctx, db, m, components); err != nil {
@@ -166,7 +168,7 @@ func Command(ctx context.Context, db *pgxpool.Pool, opts Migrations, args []stri
 		return nil
 	}
 	if db == nil {
-		return errors.New("database: migrations need a database (a *pgxpool.Pool in core.App.Globals)")
+		return errNoDatabase
 	}
 	r, err := newRunner(db, migs)
 	if err != nil {
