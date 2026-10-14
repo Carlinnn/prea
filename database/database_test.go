@@ -461,3 +461,11 @@ func TestSyncSchemaModes(t *testing.T) {
 		t.Fatalf("drop: %v", err)
 	}
 }
+
+func TestErrorStatus(t *testing.T) {
+	for err, want := range map[error]int{ErrNotFound: 404, ErrConflict: 409, ErrInvalidInput: 400} {
+		if got := err.(interface{ HTTPStatus() int }).HTTPStatus(); got != want {
+			t.Errorf("%v: %d, want %d (core.Error replies with it)", err, got, want)
+		}
+	}
+}

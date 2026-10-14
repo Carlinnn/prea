@@ -8,8 +8,6 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"prea/database"
-	"prea/security"
 	"strings"
 	"testing"
 	"time"
@@ -177,23 +175,30 @@ func TestServeLifecycle(t *testing.T) {
 	}
 }
 
+type teapot struct{}
+
+func (teapot) Error() string   { return "short and stout" }
+func (teapot) HTTPStatus() int { return http.StatusTeapot }
+
 func TestErrorStatus(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	for err, want := range map[error]int{
-		database.ErrNotFound:            404,
-		database.ErrInvalidInput:        400,
-		database.ErrConflict:            409,
-		NewError(403, "not the owner"):  403,
-		NewError(http.StatusTeapot, ""): 418,
-		security.ErrInvalidToken:        401,
-		security.ErrInvalidHash:         500,
-		errors.New("anything else"):     500,
+	for err, want := range map[error]struct {
+		status int
+		text   string
+	}{
+		NewError(403, "not the owner"):  {403, "not the owner"},
+		NewError(http.StatusTeapot, ""): {418, "I'm a teapot"},
+		teapot{}:                        {418, "short and stout"}, // any error with HTTPStatus
+		errors.New("anything else"):     {500, "internal server error"},
 	} {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-		Error(c, fmt.Errorf("%w: wrapped", err))
-		if w.Code != want {
-			t.Errorf("%v: %d, want %d", err, w.Code, want)
+		Error(c, fmt.Errorf("detail: %w", err))
+		if w.Code != want.status || !strings.Contains(w.Body.String(), `"`+want.text+`"`) || strings.Contains(w.Body.String(), "detail") {
+			t.Errorf("%v: %d %s, want %d %q without the wrapped detail", err, w.Code, w.Body, want.status, want.text)
+		}
+		if len(c.Errors) != 1 {
+			t.Errorf("%v: the whole error must reach the log: %v", err, c.Errors)
 		}
 	}
 }

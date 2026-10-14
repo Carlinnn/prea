@@ -3,6 +3,7 @@ package security
 import (
 	"errors"
 	"fmt"
+	"net/http"
 
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -13,10 +14,20 @@ const (
 )
 
 var (
-	ErrInvalidToken       = errors.New("invalid token")             // bad signature, expired, wrong algorithm; core.Error answers 401
-	ErrInvalidHash        = errors.New("invalid hash")              // stored password hash is malformed
-	ErrInvalidHashVersion = errors.New("invalid algorithm version") // stored hash from another argon2 version
+	ErrInvalidToken       error = &statusError{"invalid token", http.StatusUnauthorized} // bad signature, expired, wrong algorithm
+	ErrInvalidHash              = errors.New("invalid hash")                             // stored password hash is malformed
+	ErrInvalidHashVersion       = errors.New("invalid algorithm version")                // stored hash from another argon2 version
 )
+
+// statusError gives core.Error the status to reply with, without core
+// importing this package.
+type statusError struct {
+	msg    string
+	status int
+}
+
+func (e *statusError) Error() string   { return e.msg }
+func (e *statusError) HTTPStatus() int { return e.status }
 
 // SignKey signs and checks the tokens; set it at startup with SetSignKey.
 var SignKey []byte

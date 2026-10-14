@@ -27,3 +27,9 @@ func TestJwt(t *testing.T) {
 		t.Fatal("only HS256 is accepted")
 	}
 }
+
+func TestErrorStatus(t *testing.T) {
+	if got := ErrInvalidToken.(interface{ HTTPStatus() int }).HTTPStatus(); got != 401 {
+		t.Fatalf("core.Error must reply 401 to an invalid token: %d", got)
+	}
+}
