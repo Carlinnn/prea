@@ -103,15 +103,7 @@ func TestGeneratedProject(t *testing.T) {
 // answer 200, then stops it with SIGINT.
 func serves(t *testing.T, bin string) {
 	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	port := ln.Addr().(*net.TCPAddr).Port
-	ln.Close()
-	yaml, _ := os.ReadFile(filepath.Join("config", "application.yaml"))
-	write(t, filepath.Join("config", "application.yaml"), strings.Replace(string(yaml), "port: 8000", fmt.Sprintf("port: %d", port), 1))
-
+	port := usePort(t)
 	server := exec.Command(bin)
 	if err := server.Start(); err != nil {
 		t.Fatal(err)
@@ -130,6 +122,20 @@ func serves(t *testing.T, bin string) {
 		time.Sleep(100 * time.Millisecond)
 	}
 	t.Fatalf("%s never answered on port %d", bin, port)
+}
+
+// usePort sets server.port of the project in the current dir to a free port.
+func usePort(t *testing.T) int {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := ln.Addr().(*net.TCPAddr).Port
+	ln.Close()
+	yaml, _ := os.ReadFile(filepath.Join("config", "application.yaml"))
+	write(t, filepath.Join("config", "application.yaml"), strings.Replace(string(yaml), "port: 8000", fmt.Sprintf("port: %d", port), 1))
+	return port
 }
 
 // crudTest goes through the generated preá's CRUD over HTTP, with the whole

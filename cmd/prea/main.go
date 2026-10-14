@@ -22,6 +22,7 @@ func app() *cli.Command {
 		Commands: []*cli.Command{
 			newCommand(),
 			runCommand(),
+			devCommand(),
 			buildCommand(),
 			testsCommand(),
 			generateCommand(),

@@ -39,10 +39,8 @@ func runServer(ctx context.Context, cmd *cli.Command, env ...string) error {
 	defer os.RemoveAll(dir)
 
 	bin := filepath.Join(dir, "server")
-	build := exec.CommandContext(ctx, "go", "build", "-o", bin, ".")
-	build.Stdout, build.Stderr = os.Stdout, os.Stderr
-	if err := build.Run(); err != nil {
-		return fmt.Errorf("build: %w", err)
+	if err := buildServer(ctx, bin); err != nil {
+		return err
 	}
 
 	signals := make(chan os.Signal, 1)
@@ -67,4 +65,14 @@ func runServer(ctx context.Context, cmd *cli.Command, env ...string) error {
 		}
 	}()
 	return server.Wait()
+}
+
+// buildServer builds the main package at the project root into bin.
+func buildServer(ctx context.Context, bin string) error {
+	build := exec.CommandContext(ctx, "go", "build", "-o", bin, ".")
+	build.Stdout, build.Stderr = os.Stdout, os.Stderr
+	if err := build.Run(); err != nil {
+		return fmt.Errorf("build: %w", err)
+	}
+	return nil
 }
