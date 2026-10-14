@@ -30,9 +30,11 @@ const (
 )
 
 // templates/prea/<path>.tmpl becomes <preá dir>/<path>.go;
-// templates/middleware(_func).tmpl becomes <middleware dir>/<name>.go.
+// templates/middleware(_func).tmpl becomes <middleware dir>/<name>.go;
+// templates/new/<path>.tmpl becomes <project>/<path> (prea new). all: keeps
+// the dotfiles, like .gitignore.
 //
-//go:embed templates
+//go:embed all:templates
 var templatesFS embed.FS
 
 // validName takes words of letters, in camel case or joined by "_":
@@ -46,6 +48,8 @@ type templateData struct {
 	Route     string // order-item
 	Framework string
 	Import    string
+	Module    string // prea new: the project's module path
+	WithDB    bool   // prea new --with-db
 }
 
 // names derives every form of a valid name.
@@ -263,9 +267,11 @@ func render(dst, name string, data templateData) error {
 		return fmt.Errorf("render %s: %w", name, err)
 	}
 
-	src, err := format.Source(buf.Bytes())
-	if err != nil {
-		return fmt.Errorf("format %s: %w", name, err)
+	src := buf.Bytes()
+	if strings.HasSuffix(dst, ".go") {
+		if src, err = format.Source(src); err != nil {
+			return fmt.Errorf("format %s: %w", name, err)
+		}
 	}
 
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {

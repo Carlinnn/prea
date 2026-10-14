@@ -20,6 +20,7 @@ func app() *cli.Command {
 		Name:  "prea",
 		Usage: "Preá framework CLI",
 		Commands: []*cli.Command{
+			newCommand(),
 			runCommand(),
 			buildCommand(),
 			testsCommand(),

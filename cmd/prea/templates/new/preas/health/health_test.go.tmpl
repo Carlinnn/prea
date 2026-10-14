@@ -1,0 +1,22 @@
+package health
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"{{.Framework}}"
+	"{{.Framework}}/core"
+)
+
+// A preá's tests live next to its code: they see its unexported parts, and
+// prea.Test mounts only this module, with the tests profile.
+func TestHealth(t *testing.T) {
+	app := prea.Test(t, prea.Config{Modules: []*core.Module{Module}})
+
+	w := httptest.NewRecorder()
+	app.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/health", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET /health: %d %s", w.Code, w.Body)
+	}
+}

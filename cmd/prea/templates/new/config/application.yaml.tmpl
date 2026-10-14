@@ -1,0 +1,30 @@
+# Base configuration; application-<profile>.yaml completes it for the active
+# profile (PREA_PROFILE, or prea run/dev --profile). The environment only
+# enters where it is referenced: ${VAR}. A key that isn't here is zero/nil.
+server:
+  port: 8000 # required
+  mode: debug # required: debug | release | test
+  # optional, with these defaults:
+  # read_header_timeout: 5s
+  # read_timeout: 30s
+  # write_timeout: 30s
+  # idle_timeout: 120s
+  # shutdown_timeout: 15s
+  # max_header_bytes: 1048576
+  # trusted_proxies: []
+logging:
+  level: info # debug | info | success | error
+  format: text # text | json
+{{- if .WithDB}}
+database:
+  url: ${DATABASE_URL}
+  schema: validate # none | validate | update | create | create-drop
+  migrations:
+    dir: migrations
+    version: semver # semver (0.0.1) | timestamp
+    on_start: false # apply the pending migrations at startup
+    from_models: false # write a migration with the models' diff at startup
+{{- end}}
+# security:
+#   jwt:
+#     secret: ${JWT_SECRET} # 32+ bytes, only if the app uses JWT

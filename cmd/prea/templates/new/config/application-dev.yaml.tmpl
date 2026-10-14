@@ -1,6 +1,8 @@
 logging:
   level: debug
+{{- if .WithDB}}
 database:
   migrations:
     from_models: true # a model change becomes a migration at startup...
     on_start: true # ...that is applied right away
+{{- end}}

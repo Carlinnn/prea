@@ -7,11 +7,7 @@ use (
 	./core
 	./database
 	./di
-	./example
 	./logger
 	./security
 )
 
-// The root module isn't published yet: its version points at the disk until
-// the release.
-replace github.com/prea-framework/prea v0.0.1 => ./

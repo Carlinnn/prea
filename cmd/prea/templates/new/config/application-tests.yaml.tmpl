@@ -1,0 +1,10 @@
+# Used by prea tests and prea.Test.
+server:
+  mode: test
+logging:
+  level: error
+{{- if .WithDB}}
+database:
+  url: ${TEST_DATABASE_URL} # a database only for tests: create-drop empties it
+  schema: create-drop
+{{- end}}
