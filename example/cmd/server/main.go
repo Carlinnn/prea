@@ -30,11 +30,11 @@ func main() {
 }
 
 func run() error {
-	cfg, err := config.Load("internal/config", "")
+	cfg, err := config.Load("config", "")
 	if err != nil {
 		return err
 	}
-	// The keys are in internal/config/application.yaml; missing ones stay "".
+	// The keys are in config/application.yaml; missing ones stay "".
 	var port, mode, logLevel, logFormat, dbURL, jwtSecret string
 	var dbOpts database.Options
 	if err := errors.Join(

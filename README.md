@@ -74,9 +74,9 @@ prea/
 ├── config/                  # módulo: carrega a config (koanf) e os profiles
 └── example/                 # a app de exemplo, um módulo à parte
     ├── cmd/server/          # entrypoint
+    ├── config/              # application.yaml e um arquivo por profile
     ├── migrations/          # 0.0.1_models.sql...
-    └── internal/
-        ├── config/          # application.yaml e um arquivo por profile
+    └── internal/            # só o código da aplicação
         ├── preas/
         │   ├── preas.go     # módulos, segurança HTTP e middlewares globais
         │   ├── user/
@@ -682,10 +682,10 @@ No middleware, o arquivo segue a tabela: `prea g m rate_limit` cria `internal/mi
 
 ## Configuração
 
-No estilo do Spring: `application.yaml` é a base, e `application-<profile>.yaml` a completa para o profile ativo. Os arquivos são da aplicação; na app de exemplo, ficam em `internal/config/`. O carregamento usa o [koanf](https://github.com/knadh/koanf).
+No estilo do Spring: `application.yaml` é a base, e `application-<profile>.yaml` a completa para o profile ativo. Os arquivos são da aplicação; na app de exemplo, ficam em `example/config/`. O carregamento usa o [koanf](https://github.com/knadh/koanf).
 
 ```yaml
-# internal/config/application.yaml
+# config/application.yaml
 server:
   port: 8000
 database:
