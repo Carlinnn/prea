@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"slices"
 
-	"prea/di"
+	"github.com/prea-framework/prea/di"
 
 	"github.com/gin-gonic/gin"
 )

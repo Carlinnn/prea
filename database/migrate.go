@@ -16,7 +16,7 @@ import (
 	"testing/fstest"
 	"time"
 
-	"prea/logger"
+	"github.com/prea-framework/prea/logger"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"

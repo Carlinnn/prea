@@ -23,7 +23,7 @@ const fixtureRegistry = `package preas
 import (
 	"time"
 
-	"prea/core"
+	"github.com/prea-framework/prea/core"
 )
 
 var Modules = []*core.Module{}
@@ -200,7 +200,7 @@ func TestGeneratePrea(t *testing.T) {
 	}
 	modules, imports = registry(t, snapshot(t)[filepath.ToSlash(registryFile)])
 	if !slices.Equal(modules, []string{"orderitem.Module", "product.Module"}) ||
-		!slices.Equal(imports, []string{"time", "example.com/app/internal/preas/orderitem", "example.com/app/internal/preas/product", "prea/core"}) { // gofmt sorts the group
+		!slices.Equal(imports, []string{"time", "example.com/app/internal/preas/orderitem", "example.com/app/internal/preas/product", "github.com/prea-framework/prea/core"}) { // gofmt sorts the group
 		t.Fatalf("registry after two: %v %v", modules, imports)
 	}
 
@@ -219,10 +219,10 @@ func TestGeneratePrea(t *testing.T) {
 // A broken registry is detected before any file is generated.
 func TestGeneratePreaBadRegistry(t *testing.T) {
 	for name, src := range map[string]string{
-		"no Modules":         "package preas\n\nimport (\n\t\"prea/core\"\n)\n\nvar Other = []*core.Module{}\n",
-		"single import":      "package preas\n\nimport \"prea/core\"\n\nvar Modules = []*core.Module{}\n",
+		"no Modules":         "package preas\n\nimport (\n\t\"github.com/prea-framework/prea/core\"\n)\n\nvar Other = []*core.Module{}\n",
+		"single import":      "package preas\n\nimport \"github.com/prea-framework/prea/core\"\n\nvar Modules = []*core.Module{}\n",
 		"syntax error":       "package preas\n\nvar Modules = []*core.Module{\n",
-		"Modules not a list": "package preas\n\nimport (\n\t\"prea/core\"\n)\n\nvar Modules = core.All()\n",
+		"Modules not a list": "package preas\n\nimport (\n\t\"github.com/prea-framework/prea/core\"\n)\n\nvar Modules = core.All()\n",
 	} {
 		t.Run(name, func(t *testing.T) {
 			newProject(t)
@@ -257,7 +257,7 @@ func TestGeneratePreaBadRegistry(t *testing.T) {
 
 // registered must handle the shapes a person leaves preas.go in.
 func TestRegistered(t *testing.T) {
-	const head = "package preas\n\nimport (\n\t\"time\"\n\n\t\"prea/core\"\n\t\"example.com/app/internal/preas/user\"\n\tx \"example.com/app/internal/preas/auth\"\n)\n\nvar _ = time.Second\n\n"
+	const head = "package preas\n\nimport (\n\t\"time\"\n\n\t\"github.com/prea-framework/prea/core\"\n\t\"example.com/app/internal/preas/user\"\n\tx \"example.com/app/internal/preas/auth\"\n)\n\nvar _ = time.Second\n\n"
 	for name, tc := range map[string]struct{ modules, want string }{
 		"empty":               {"var Modules = []*core.Module{}", "product.Module"},
 		"inline, no comma":    {"var Modules = []*core.Module{user.Module, x.Module}", "user.Module x.Module product.Module"},

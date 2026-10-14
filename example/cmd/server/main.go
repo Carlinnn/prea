@@ -11,12 +11,12 @@ import (
 	"syscall"
 	"time"
 
-	"prea/config"
-	"prea/core"
-	"prea/database"
-	"prea/internal/preas"
-	"prea/logger"
-	"prea/security"
+	"github.com/prea-framework/prea/config"
+	"github.com/prea-framework/prea/core"
+	"github.com/prea-framework/prea/database"
+	"github.com/prea-framework/prea/example/internal/preas"
+	"github.com/prea-framework/prea/logger"
+	"github.com/prea-framework/prea/security"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"

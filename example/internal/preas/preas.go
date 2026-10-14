@@ -3,9 +3,9 @@ package preas
 import (
 	"time"
 
-	"prea/core"
-	"prea/internal/preas/auth"
-	"prea/internal/preas/user"
+	"github.com/prea-framework/prea/core"
+	"github.com/prea-framework/prea/example/internal/preas/auth"
+	"github.com/prea-framework/prea/example/internal/preas/user"
 )
 
 var Modules = []*core.Module{

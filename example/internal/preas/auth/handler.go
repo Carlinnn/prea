@@ -1,11 +1,11 @@
 package auth
 
 import (
+	"github.com/prea-framework/prea/core"
+	"github.com/prea-framework/prea/example/internal/middleware"
+	"github.com/prea-framework/prea/example/internal/preas/auth/dtos"
+	"github.com/prea-framework/prea/security"
 	"net/http"
-	"prea/core"
-	"prea/internal/middleware"
-	"prea/internal/preas/auth/dtos"
-	"prea/security"
 
 	"github.com/gin-gonic/gin"
 )

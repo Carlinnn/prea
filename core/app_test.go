@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"prea/config"
-	"prea/di"
+	"github.com/prea-framework/prea/config"
+	"github.com/prea-framework/prea/di"
 
 	"github.com/gin-gonic/gin"
 )

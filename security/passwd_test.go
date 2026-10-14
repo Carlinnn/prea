@@ -1,7 +1,7 @@
 package security_test
 
 import (
-	"prea/security"
+	"github.com/prea-framework/prea/security"
 	"testing"
 )
 

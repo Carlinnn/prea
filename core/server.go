@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	"prea/logger"
+	"github.com/prea-framework/prea/logger"
 )
 
 // Server configures the HTTP server. Zero fields use the defaults below.

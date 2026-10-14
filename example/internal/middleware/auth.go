@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"strings"
 
-	"prea/core"
-	"prea/internal/preas/auth/dtos"
-	"prea/security"
+	"github.com/prea-framework/prea/core"
+	"github.com/prea-framework/prea/example/internal/preas/auth/dtos"
+	"github.com/prea-framework/prea/security"
 
 	"github.com/gin-gonic/gin"
 )

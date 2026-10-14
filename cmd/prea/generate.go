@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	frameworkModule = "prea"
+	frameworkModule = "github.com/prea-framework/prea"
 	preasDir        = "internal/preas"
 	middlewareDir   = "internal/middleware"
 )

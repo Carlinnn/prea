@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"prea/di"
+	"github.com/prea-framework/prea/di"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"

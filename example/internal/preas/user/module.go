@@ -1,9 +1,9 @@
 package user
 
 import (
-	"prea/core"
-	"prea/di"
-	"prea/internal/middleware"
+	"github.com/prea-framework/prea/core"
+	"github.com/prea-framework/prea/di"
+	"github.com/prea-framework/prea/example/internal/middleware"
 )
 
 var Module = &core.Module{

@@ -3,7 +3,7 @@ package user
 import (
 	"context"
 
-	"prea/database"
+	"github.com/prea-framework/prea/database"
 )
 
 type Repository struct {

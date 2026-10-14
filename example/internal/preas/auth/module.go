@@ -1,9 +1,9 @@
 package auth
 
 import (
-	"prea/core"
-	"prea/internal/middleware"
-	"prea/internal/preas/user"
+	"github.com/prea-framework/prea/core"
+	"github.com/prea-framework/prea/example/internal/middleware"
+	"github.com/prea-framework/prea/example/internal/preas/user"
 )
 
 var Module = &core.Module{

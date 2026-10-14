@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"prea/logger"
+	"github.com/prea-framework/prea/logger"
 
 	"github.com/gin-gonic/gin"
 )

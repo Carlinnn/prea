@@ -19,13 +19,17 @@ func TestGeneratedProject(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sum, err := os.ReadFile(filepath.Join(framework, "go.sum"))
+	sum, err := os.ReadFile(filepath.Join(framework, "example", "go.sum")) // every external module the framework uses
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	dir := newProject(t)
-	write(t, "go.mod", "module example.com/app\n\ngo 1.26.2\n\nrequire prea v0.0.0\n\nreplace prea => "+framework+"\n")
+	mod := "module example.com/app\n\ngo 1.26.2\n\nrequire (\n\t" + frameworkModule + "/core v0.0.1\n\t" + frameworkModule + "/database v0.0.1\n)\n"
+	for _, m := range []string{"config", "core", "database", "di", "logger"} { // the local modules, unpublished
+		mod += "\nreplace " + frameworkModule + "/" + m + " => " + filepath.Join(framework, m) + "\n"
+	}
+	write(t, "go.mod", mod)
 	write(t, "go.sum", string(sum))
 	os.Remove(filepath.Join(middlewareDir, "auth.go"))
 
@@ -70,8 +74,8 @@ import (
 	"testing"
 
 	"example.com/app/internal/middleware"
-	"prea/core"
-	"prea/database"
+	"github.com/prea-framework/prea/core"
+	"github.com/prea-framework/prea/database"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
