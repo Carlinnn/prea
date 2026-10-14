@@ -1,6 +1,7 @@
 package di
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -134,5 +135,17 @@ func TestBareTag(t *testing.T) {
 	err := New(&DB{}).Load(&Module{Name: "b", Providers: []any{reflect.New(bare).Elem().Interface()}})
 	if err == nil || !strings.Contains(err.Error(), `.DB: use the tag inject:""`) {
 		t.Fatalf("a bare inject must fail with the fix: %v", err)
+	}
+}
+
+func TestMissingError(t *testing.T) {
+	type needs struct {
+		DB *strings.Builder `inject:"main"`
+	}
+	m := &Module{Name: "m", Providers: []any{needs{}}}
+	err := New().Load(m)
+	var missing *MissingError
+	if !errors.As(err, &missing) || missing.Type != reflect.TypeFor[*strings.Builder]() || missing.Name != "main" {
+		t.Fatalf("a missing dependency must be a *MissingError with its type and name: %v", err)
 	}
 }

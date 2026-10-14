@@ -68,7 +68,18 @@ func resolve(t reflect.Type, name string, scopes [][]component) (any, error) {
 			return dep, err
 		}
 	}
-	return nil, fmt.Errorf("no provider for %v%s", t, describe(name))
+	return nil, &MissingError{t, name}
+}
+
+// MissingError is the error when nothing provides a dependency. It comes
+// wrapped with the module and the field; find it with errors.As.
+type MissingError struct {
+	Type reflect.Type
+	Name string // the inject:"name"; "" when unnamed
+}
+
+func (e *MissingError) Error() string {
+	return fmt.Sprintf("no provider for %v%s", e.Type, describe(e.Name))
 }
 
 func find(t reflect.Type, name string, scope []component) (dep any, found bool, err error) {

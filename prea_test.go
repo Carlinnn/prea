@@ -186,3 +186,16 @@ func TestTestWithDatabase(t *testing.T) {
 	// and the table exists because Setup ran the schema before Init.
 	Test(t, Config{Modules: []*core.Module{{Name: "notes", Providers: []any{notes{}, counter{}}}}})
 }
+
+func TestRepositoryWithoutDatabase(t *testing.T) {
+	project(t, map[string]string{"config/application.yaml": base})
+	s, err := load(Config{}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	app, _ := s.app(Config{Modules: []*core.Module{{Name: "notes", Providers: []any{notes{}}}}})
+	_, _, err = app.Build(t.Context())
+	if err = s.hint(err); err == nil || !strings.Contains(err.Error(), "set database.url") {
+		t.Fatalf("a repository without database.url must say which key is missing: %v", err)
+	}
+}

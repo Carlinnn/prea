@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"syscall"
@@ -23,6 +24,7 @@ import (
 	"github.com/prea-framework/prea/config"
 	"github.com/prea-framework/prea/core"
 	"github.com/prea-framework/prea/database"
+	"github.com/prea-framework/prea/di"
 	"github.com/prea-framework/prea/logger"
 	"github.com/prea-framework/prea/security"
 
@@ -86,7 +88,7 @@ func run(cfg Config) error {
 	if err != nil {
 		return err
 	}
-	return app.Run(":" + s.port)
+	return s.hint(app.Run(":" + s.port))
 }
 
 // Test builds the app like Run, with the tests profile
@@ -117,7 +119,7 @@ func Test(t testing.TB, cfg Config) http.Handler {
 	}
 	engine, closer, err := app.Build(t.Context())
 	if err != nil {
-		t.Fatal(err)
+		t.Fatal(s.hint(err))
 	}
 	t.Cleanup(func() { // before s.close: cleanups run last in, first out
 		if err := closer(context.Background()); err != nil {
@@ -209,6 +211,16 @@ func (s *server) app(cfg Config) (core.App, error) {
 		app.Globals = []any{s.db}
 	}
 	return app, nil
+}
+
+// hint explains a repository that found no database: the pool is missing
+// because database.url isn't set in the profile.
+func (s *server) hint(err error) error {
+	var missing *di.MissingError
+	if s.db == nil && errors.As(err, &missing) && missing.Type == reflect.TypeFor[*pgxpool.Pool]() {
+		return fmt.Errorf("%w: set database.url in the profile (config/application*.yaml)", err)
+	}
+	return err
 }
 
 func (s *server) close() {
