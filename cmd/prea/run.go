@@ -69,9 +69,7 @@ func runServer(ctx context.Context, cmd *cli.Command, env ...string) error {
 
 // buildServer builds the main package at the project root into bin.
 func buildServer(ctx context.Context, bin string) error {
-	build := exec.CommandContext(ctx, "go", "build", "-o", bin, ".")
-	build.Stdout, build.Stderr = os.Stdout, os.Stderr
-	if err := build.Run(); err != nil {
+	if err := goRun(ctx, nil, "build", "-o", bin, "."); err != nil {
 		return fmt.Errorf("build: %w", err)
 	}
 	return nil

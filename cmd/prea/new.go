@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -84,9 +83,7 @@ func createProject(ctx context.Context, name, module string, withDB bool, local 
 		}
 	}
 	for _, args := range steps {
-		goCmd := exec.CommandContext(ctx, "go", args...)
-		goCmd.Dir, goCmd.Stdout, goCmd.Stderr = name, os.Stderr, os.Stderr
-		if err := goCmd.Run(); err != nil {
+		if err := inDir(name, func() error { return goRun(ctx, nil, args...) }); err != nil {
 			return fmt.Errorf("go %s: %w", strings.Join(args, " "), err)
 		}
 	}
