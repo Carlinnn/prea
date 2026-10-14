@@ -109,7 +109,7 @@ go get github.com/prea-framework/prea/core github.com/prea-framework/prea/databa
   core.App{..., Globals: []any{db}, Setup: database.Setup(db, opts)}
   ```
 - **Versões:** uma tag por módulo, com o prefixo da pasta (`core/v0.0.1`, `cmd/prea/v0.0.1`). Todos os módulos ficam na mesma major; as minors e os patches andam separados, conforme cada um muda. A versão atual é a pré-alfa `v0.0.1`.
-- **No repositório:** o `go.work` commitado liga os módulos pelo disco, então um clone compila sem `replace`. Os `replace` do `go.work` cobrem as versões dos irmãos que ainda não foram publicadas. Como a raiz não é um módulo, os comandos usam o caminho: `go test github.com/prea-framework/prea/...`.
+- **No repositório:** o `go.work` commitado liga os módulos pelo disco, então um clone compila sem `replace`. Um módulo que passa a exigir uma versão nova de um irmão só funciona fora do workspace depois que a tag dessa versão é publicada. Como a raiz não é um módulo, os comandos usam o caminho: `go test github.com/prea-framework/prea/...`.
 - **O CI** confere que cada módulo importa exatamente os módulos do framework que o seu `go.mod` exige. No workspace, um import sem `require` compila, e é essa conferência que impede o `core` de voltar a importar o `database`.
 
 ## Conceitos
