@@ -152,8 +152,8 @@ func TestGeneratePrea(t *testing.T) {
 	files := snapshot(t)
 	var got []string
 	for name := range files {
-		if strings.HasPrefix(name, "internal/preas/orderitem/") {
-			got = append(got, strings.TrimPrefix(name, "internal/preas/orderitem/"))
+		if strings.HasPrefix(name, "preas/orderitem/") {
+			got = append(got, strings.TrimPrefix(name, "preas/orderitem/"))
 		}
 	}
 	slices.Sort(got)
@@ -163,7 +163,7 @@ func TestGeneratePrea(t *testing.T) {
 	}
 
 	for name, content := range files {
-		if !strings.HasPrefix(name, "internal/preas/orderitem/") {
+		if !strings.HasPrefix(name, "preas/orderitem/") {
 			continue
 		}
 		pkg := "orderitem"
@@ -181,16 +181,16 @@ func TestGeneratePrea(t *testing.T) {
 		"model.go":      `return "order_item"`,
 		"handler.go":    `r.Group("/order-item")`,
 		"repository.go": "database.BaseRepository[OrderItem]",
-		"service.go":    `"example.com/app/internal/preas/orderitem/dtos"`,
+		"service.go":    `"example.com/app/preas/orderitem/dtos"`,
 		"module.go":     `Name: "orderitem"`,
 	} {
-		if !strings.Contains(files["internal/preas/orderitem/"+name], sub) {
+		if !strings.Contains(files["preas/orderitem/"+name], sub) {
 			t.Errorf("%s must contain %s", name, sub)
 		}
 	}
 
 	modules, imports := registry(t, files[filepath.ToSlash(registryFile)])
-	if !slices.Equal(modules, []string{"orderitem.Module"}) || !slices.Contains(imports, "example.com/app/internal/preas/orderitem") {
+	if !slices.Equal(modules, []string{"orderitem.Module"}) || !slices.Contains(imports, "example.com/app/preas/orderitem") {
 		t.Fatalf("registry: %v %v", modules, imports)
 	}
 
@@ -200,7 +200,7 @@ func TestGeneratePrea(t *testing.T) {
 	}
 	modules, imports = registry(t, snapshot(t)[filepath.ToSlash(registryFile)])
 	if !slices.Equal(modules, []string{"orderitem.Module", "product.Module"}) ||
-		!slices.Equal(imports, []string{"time", "example.com/app/internal/preas/orderitem", "example.com/app/internal/preas/product", "github.com/prea-framework/prea/core"}) { // gofmt sorts the group
+		!slices.Equal(imports, []string{"time", "example.com/app/preas/orderitem", "example.com/app/preas/product", "github.com/prea-framework/prea/core"}) { // gofmt sorts the group
 		t.Fatalf("registry after two: %v %v", modules, imports)
 	}
 
@@ -257,7 +257,7 @@ func TestGeneratePreaBadRegistry(t *testing.T) {
 
 // registered must handle the shapes a person leaves preas.go in.
 func TestRegistered(t *testing.T) {
-	const head = "package preas\n\nimport (\n\t\"time\"\n\n\t\"github.com/prea-framework/prea/core\"\n\t\"example.com/app/internal/preas/user\"\n\tx \"example.com/app/internal/preas/auth\"\n)\n\nvar _ = time.Second\n\n"
+	const head = "package preas\n\nimport (\n\t\"time\"\n\n\t\"github.com/prea-framework/prea/core\"\n\t\"example.com/app/preas/user\"\n\tx \"example.com/app/preas/auth\"\n)\n\nvar _ = time.Second\n\n"
 	for name, tc := range map[string]struct{ modules, want string }{
 		"empty":               {"var Modules = []*core.Module{}", "product.Module"},
 		"inline, no comma":    {"var Modules = []*core.Module{user.Module, x.Module}", "user.Module x.Module product.Module"},
@@ -270,7 +270,7 @@ func TestRegistered(t *testing.T) {
 			newProject(t)
 			src := head + tc.modules + "\n"
 			write(t, registryFile, src)
-			out, err := registered("product", "example.com/app/internal/preas/product")
+			out, err := registered("product", "example.com/app/preas/product")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -278,7 +278,7 @@ func TestRegistered(t *testing.T) {
 			if strings.Join(modules, " ") != tc.want {
 				t.Fatalf("modules: %v\n%s", modules, out)
 			}
-			if i := slices.Index(imports, "example.com/app/internal/preas/product"); i != slices.Index(imports, "example.com/app/internal/preas/auth")+1 {
+			if i := slices.Index(imports, "example.com/app/preas/product"); i != slices.Index(imports, "example.com/app/preas/auth")+1 {
 				t.Fatalf("the import goes after the last preá: %v", imports)
 			}
 			if b, _ := os.ReadFile(registryFile); string(b) != src {
@@ -292,7 +292,7 @@ func TestRegistered(t *testing.T) {
 	t.Run("aliased import with the same name", func(t *testing.T) {
 		newProject(t)
 		write(t, registryFile, head+"var Modules = []*core.Module{user.Module, x.Module}\n")
-		if _, err := registered("x", "example.com/app/internal/preas/x"); err == nil {
+		if _, err := registered("x", "example.com/app/preas/x"); err == nil {
 			t.Fatal("x is already the alias of auth")
 		}
 	})
@@ -329,7 +329,7 @@ func TestGenerateMiddleware(t *testing.T) {
 		t.Fatal(err)
 	}
 	files := snapshot(t)
-	component, fn := files["internal/middleware/rate_limit.go"], files["internal/middleware/request_timing.go"]
+	component, fn := files["middleware/rate_limit.go"], files["middleware/request_timing.go"]
 	if !strings.Contains(component, "type RateLimit struct") || !strings.Contains(component, "func (m *RateLimit) Handle(c *gin.Context)") {
 		t.Fatalf("component:\n%s", component)
 	}
@@ -354,7 +354,7 @@ func TestTemplatesRender(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			dir := t.TempDir()
 			data := names(name)
-			data.Import = "example.com/app/internal/preas/" + data.Pkg
+			data.Import = "example.com/app/preas/" + data.Pkg
 			if err := renderAll(dir, data); err != nil {
 				t.Fatal(err)
 			}

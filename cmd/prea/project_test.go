@@ -73,7 +73,7 @@ import (
 	"strings"
 	"testing"
 
-	"example.com/app/internal/middleware"
+	"example.com/app/middleware"
 	"github.com/prea-framework/prea/core"
 	"github.com/prea-framework/prea/database"
 

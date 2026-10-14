@@ -25,8 +25,8 @@ import (
 
 const (
 	frameworkModule = "github.com/prea-framework/prea"
-	preasDir        = "internal/preas"
-	middlewareDir   = "internal/middleware"
+	preasDir        = "preas"
+	middlewareDir   = "middleware"
 )
 
 // templates/prea/<path>.tmpl becomes <preá dir>/<path>.go;
