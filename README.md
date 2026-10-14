@@ -32,8 +32,9 @@ Framework web modular para Go, inspirado no Spring e no Angular. Ele traz módul
 ## Começando
 
 ```bash
-# 1. CLI
-go install github.com/prea-framework/prea/cmd/prea@latest   # ou, num clone: go install ./cmd/prea
+# 1. CLI: instala com o go install e põe no PATH (zsh, bash, fish ou sh)
+curl -fsSL https://raw.githubusercontent.com/prea-framework/prea/main/install.sh | sh
+# uma versão: ... | PREA_VERSION=v0.0.1 sh; num clone: go install ./cmd/prea
 
 # 2. Configuração (a app de exemplo fica em example/)
 cd example
