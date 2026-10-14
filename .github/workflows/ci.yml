@@ -1,0 +1,49 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: prea
+          POSTGRES_DB: prea_test
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 2s --health-timeout 5s --health-retries 15
+    env:
+      PREA_TEST_DATABASE_URL: postgres://postgres:prea@localhost:5432/prea_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.work
+          cache-dependency-path: "**/go.sum"
+
+      # Every module of go.work: ./... at the root matches none, the root isn't a module.
+      - run: go vet github.com/prea-framework/prea/...
+      - run: go test -race github.com/prea-framework/prea/...
+
+      # In a workspace an import compiles even without a require, so check that
+      # each module imports exactly the framework modules its go.mod requires:
+      # core must not quietly start importing database again.
+      - name: module requires
+        run: |
+          prefix=github.com/prea-framework/prea/
+          status=0
+          for dir in $(go list -m -f '{{.Dir}}'); do
+            cd "$dir"
+            self=$(go mod edit -json | jq -r .Module.Path)
+            used=$(go list -deps -test -f '{{with .Module}}{{.Path}}{{end}}' ./... | awk -v p="$prefix" -v s="$self" 'index($0, p) == 1 && $0 != s' | sort -u)
+            required=$(go mod edit -json | jq -r '.Require[]?.Path' | awk -v p="$prefix" 'index($0, p) == 1' | sort)
+            if [ "$used" != "$required" ]; then
+              echo "$self imports [$(echo $used)] but its go.mod requires [$(echo $required)]"
+              status=1
+            fi
+          done
+          exit $status
