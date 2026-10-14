@@ -25,7 +25,7 @@ jobs:
           go-version-file: go.work
           cache-dependency-path: "**/go.sum"
 
-      # Every module of go.work: ./... at the root matches none, the root isn't a module.
+      # Every module of go.work: ./... at the root covers only the root module.
       - run: go vet github.com/prea-framework/prea/...
       - run: go test -race github.com/prea-framework/prea/...
 
