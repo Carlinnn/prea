@@ -2,13 +2,14 @@
 
 Framework web modular para Go, inspirado no Spring e no Angular. Ele traz módulos com injeção de dependência por tag, handlers HTTP sobre o [gin](https://github.com/gin-gonic/gin), um repositório base para Postgres com queries no estilo PDO, middlewares em três níveis e uma CLI que gera o código de cada módulo.
 
-> **Status:** em desenvolvimento (pré-v0). A API ainda muda. Os gaps conhecidos estão no [ROADMAP.md](ROADMAP.md), e os próximos passos, em [docs/roadmap/](docs/roadmap/README.md).
+> **Status:** pré-alfa (`v0.0.1`). A API ainda muda. Os gaps conhecidos estão no [ROADMAP.md](ROADMAP.md), e os próximos passos, em [docs/roadmap/](docs/roadmap/README.md).
 
 ## Sumário
 
 - [Requisitos](#requisitos)
 - [Começando](#começando)
 - [Estrutura do projeto](#estrutura-do-projeto)
+  - [Módulos Go](#módulos-go)
 - [Conceitos](#conceitos)
   - [Módulos (preás)](#módulos-preás)
   - [Injeção de dependência](#injeção-de-dependência)
@@ -32,9 +33,10 @@ Framework web modular para Go, inspirado no Spring e no Angular. Ele traz módul
 
 ```bash
 # 1. CLI
-go install ./cmd/prea
+go install github.com/prea-framework/prea/cmd/prea@latest   # ou, num clone: go install ./cmd/prea
 
-# 2. Configuração
+# 2. Configuração (a app de exemplo fica em example/)
+cd example
 cp .env.example .env        # preencha DATABASE_URL e JWT_SECRET (openssl rand -base64 32)
 
 # 3. Subir o servidor
@@ -61,27 +63,54 @@ curl localhost:8000/users -H "Authorization: Bearer <token>"
 
 ```
 prea/
-├── cmd/
-│   ├── prea/                # CLI (instalável; não depende do projeto)
-│   │   └── templates/       # templates embutidos no binário
-│   └── server/              # entrypoint da aplicação
-├── migrations/              # migrations da aplicação (0.0.1_models.sql...)
-├── internal/                # código da aplicação
-│   ├── config/              # application.yaml e um arquivo por profile
-│   ├── preas/
-│   │   ├── preas.go         # módulos, segurança HTTP e middlewares globais
-│   │   ├── user/
-│   │   └── auth/
-│   └── middleware/          # middlewares da aplicação
-├── core/                    # framework: Module, App, Router, Middleware, Security, respostas e `core.NewError`
-├── di/                      # framework: container de injeção
-├── database/                # framework: BaseRepository, Prepare, schema e migrations
-├── security/                # framework: JWT e hash de senha (argon2id)
-├── logger/                  # framework: logs por nível (slog)
-└── config/                  # framework: carrega a config (koanf) e os profiles
+├── go.work                  # liga os módulos no desenvolvimento
+├── cmd/prea/                # módulo da CLI (instalável; não depende do framework)
+│   └── templates/           # templates embutidos no binário
+├── core/                    # módulo: Module, App, Router, Middleware, Security, respostas e `core.NewError`
+├── di/                      # módulo: container de injeção
+├── database/                # módulo: BaseRepository, Prepare, schema e migrations
+├── security/                # módulo: JWT e hash de senha (argon2id)
+├── logger/                  # módulo: logs por nível (slog)
+├── config/                  # módulo: carrega a config (koanf) e os profiles
+└── example/                 # a app de exemplo, um módulo à parte
+    ├── cmd/server/          # entrypoint
+    ├── migrations/          # 0.0.1_models.sql...
+    └── internal/
+        ├── config/          # application.yaml e um arquivo por profile
+        ├── preas/
+        │   ├── preas.go     # módulos, segurança HTTP e middlewares globais
+        │   ├── user/
+        │   └── auth/
+        └── middleware/      # middlewares da aplicação
 ```
 
 Direção das dependências: **CLI → nada**, **app → framework**, **framework → nada da app**.
+
+### Módulos Go
+
+Cada pasta do framework é um módulo, instalado e versionado à parte. Quem usa só o `core` não leva o driver do banco nem o JWT:
+
+| Módulo | Depende de (framework) | Dependências externas |
+|---|---|---|
+| `github.com/prea-framework/prea/di` | — | — |
+| `.../logger` | — | — |
+| `.../config` | — | koanf, mapstructure, godotenv |
+| `.../security` | — | golang-jwt, x/crypto |
+| `.../database` | `logger` (e `di` nos testes) | pgx, goose |
+| `.../core` | `di`, `config`, `logger` | gin |
+| `.../cmd/prea` | — | urfave/cli |
+
+```bash
+go get github.com/prea-framework/prea/core github.com/prea-framework/prea/database
+```
+
+- **O `core` não conhece o banco nem a segurança.** Os erros do `database` e do `security` dizem o próprio status (`HTTPStatus()`, veja [Erros e respostas](#erros-e-respostas)), e o banco entra na subida pelo gancho `core.App.Setup`:
+  ```go
+  core.App{..., Globals: []any{db}, Setup: database.Setup(db, opts)}
+  ```
+- **Versões:** uma tag por módulo, com o prefixo da pasta (`core/v0.0.1`, `cmd/prea/v0.0.1`). Todos os módulos ficam na mesma major; as minors e os patches andam separados, conforme cada um muda. A versão atual é a pré-alfa `v0.0.1`.
+- **No repositório:** o `go.work` commitado liga os módulos pelo disco, então um clone compila sem `replace`. Os `replace` do `go.work` cobrem as versões dos irmãos que ainda não foram publicadas. Como a raiz não é um módulo, os comandos usam o caminho: `go test github.com/prea-framework/prea/...`.
+- **O CI** confere que cada módulo importa exatamente os módulos do framework que o seu `go.mod` exige. No workspace, um import sem `require` compila, e é essa conferência que impede o `core` de voltar a importar o `database`.
 
 ## Conceitos
 
@@ -316,7 +345,7 @@ database:
     from_models: false    # gera, na subida, uma migration com o diff entre os models e o banco
 ```
 
-**Na subida**, a ordem é: `from_models` gera → `on_start` aplica → `schema` confere. No profile dev da app de exemplo, os dois ficam ligados: mudou um model, reiniciou, e a migration é gerada e aplicada.
+**Na subida**, a ordem é: `from_models` gera → `on_start` aplica → `schema` confere. Quem faz isso é o `database.Setup(pool, opts)`, ligado ao `core.App.Setup` no `main`: ele roda depois de os módulos carregarem e antes de qualquer `Init`. No profile dev da app de exemplo, os dois ficam ligados: mudou um model, reiniciou, e a migration é gerada e aplicada.
 
 ```sql
 -- migrations/0.0.2_models.sql, gerada depois de adicionar Color *string ao model
@@ -500,7 +529,7 @@ if u.ID != claims.Payload.ID {
 }
 ```
 
-Os pacotes do framework declaram os próprios erros, como o `io.EOF` e o `sql.ErrNoRows`, sem depender de HTTP. O `core.Error` os converte:
+O `core.Error` responde com o status do primeiro erro da cadeia que tem o método `HTTPStatus() int`, e com a mensagem desse erro. Assim os pacotes do framework declaram os próprios erros sem que o `core` os importe:
 
 | Erro | HTTP |
 |---|---|
@@ -509,7 +538,10 @@ Os pacotes do framework declaram os próprios erros, como o `io.EOF` e o `sql.Er
 | `database.ErrNotFound` | 404 |
 | `database.ErrConflict` | 409 |
 | `security.ErrInvalidToken` | 401 |
-| qualquer outro | 500, com mensagem genérica; o erro real vai para o log |
+| o seu, com `HTTPStatus() int` | o que o método devolver |
+| qualquer outro | 500, com mensagem genérica |
+
+O detalhe embrulhado em volta (`fmt.Errorf("%w: ...", database.ErrInvalidInput)`, a mensagem do Postgres) não chega ao cliente, que recebe só `"invalid input"`. O erro inteiro vai para o log da requisição.
 
 Os erros chegam ao cliente como `{"text": "...", "code": 2}`.
 
@@ -626,7 +658,7 @@ As senhas são guardadas com hash argon2id. Os tokens são HS256, e só esse alg
 | `prea migrate status` | lista as migrations: aplicadas (com a data) ou pendentes |
 | `prea migrate validate` | confere os arquivos sem tocar no banco; para CI |
 
-Os `prea migrate` aceitam `--profile` (`prea migrate --profile dev up`). Eles compilam o `./cmd/server` e o rodam em **modo de inspeção** (`PREA_MIGRATE`): em vez de subir o servidor, a app roda o comando com a própria config e o próprio banco. Assim a CLI não precisa saber onde estão a config e a conexão.
+Os `prea migrate` aceitam `--profile` (`prea migrate --profile dev up`). Eles compilam o `./cmd/server` e o rodam em **modo de inspeção** (`PREA_MIGRATE`, a `database.MigrateEnv`): o `main` vê a variável e, em vez de subir o servidor, roda o `database.Command` com a própria config e o próprio banco. Assim a CLI não precisa saber onde estão a config e a conexão. Na app de exemplo, isso vem antes da checagem do segredo JWT, então uma migration não exige `JWT_SECRET`.
 
 O `g` é atalho de `generate`, o `p` de `prea` e o `m` de `middleware`. Rode a CLI na raiz do projeto: ela lê o `go.mod` para descobrir o caminho dos imports.
 
@@ -664,10 +696,10 @@ security:
 ```
 
 - **Profile ativo:** um só, vindo de `PREA_PROFILE=dev` ou de `prea run --profile dev`. Sem profile, só a base é carregada; um arquivo que não existe é ignorado.
-- **Ambiente:** só entra onde o yaml o referencia, com `${VAR}`. O `.env` da raiz é lido antes (veja o `.env.example`) e não substitui o que já está no ambiente. Segredos ficam no ambiente, nunca no yaml commitado.
+- **Ambiente:** só entra onde o yaml o referencia, com `${VAR}`. O `.env` da pasta em que a app roda é lido antes (veja o `example/.env.example`) e não substitui o que já está no ambiente. Segredos ficam no ambiente, nunca no yaml commitado.
 - **Chave ausente:** uma chave que não está no yaml, ou um `${VAR}` não definido, deixa o valor zerado (`nil` em ponteiros). Quem precisa do valor valida, como o `security.SetSignKey`, que impede a subida com um segredo curto.
 
-Na app de exemplo, o `cmd/server/main.go` lê `server.port`, `server.mode` (modo do gin), `logging.level`, `logging.format`, `database.url` e `security.jwt.secret`. O `core.App` lê `database.schema` (veja [Model e schema](#model-e-schema)).
+Na app de exemplo, o `cmd/server/main.go` lê `server.port`, `server.mode` (modo do gin), `logging.level`, `logging.format`, `database.url` e `security.jwt.secret`. Ele também lê o bloco `database` (o `schema` e as `migrations`, veja [Model e schema](#model-e-schema)) e o passa ao `database.Setup`.
 
 **Nos componentes**, a tag `value:"chave"` preenche o campo na subida, como o `@Value` do Spring:
 
@@ -696,20 +728,22 @@ var Module = &core.Module{Name: "debug", Providers: []any{Handler{}}, Profiles: 
 
 ## Testes
 
+Na raiz, que não é um módulo, o `./...` não encontra nada; use o caminho, que cobre todos os módulos do `go.work`:
+
 ```bash
-go test ./...
+go test github.com/prea-framework/prea/...
 
 # sem os testes que compilam um projeto gerado
-go test -short ./...
+go test -short github.com/prea-framework/prea/...
 
 # inclui os testes de integração do banco (criam as próprias tabelas com o database.schema)
-PREA_TEST_DATABASE_URL="postgres://user:pass@localhost:5432/prea_test?sslmode=disable" go test ./...
+PREA_TEST_DATABASE_URL="postgres://user:pass@localhost:5432/prea_test?sslmode=disable" go test github.com/prea-framework/prea/...
 ```
 
 O gerador é testado em três camadas (`cmd/prea`):
 - **unidade:** formas dos nomes, nomes inválidos e a edição do `preas.go` em vários formatos (lista vazia, numa linha, com comentários, em grupo `var (...)`, import com alias);
 - **comportamento:** gera num projeto temporário e confere arquivos, registro e conteúdo; todo comando que falha deixa o projeto intacto;
-- **projeto gerado:** gera preás e middlewares num projeto novo, que usa este framework via `replace`, e roda `go vet` e `go test -race` nele. O teste de dentro monta a app e confere as rotas; com o banco, faz o CRUD inteiro pelo HTTP.
+- **projeto gerado:** gera preás e middlewares num projeto novo, ligado aos módulos locais do framework por um `replace` cada, e roda `go vet` e `go test -race` nele. O teste de dentro monta a app e confere as rotas; com o banco, faz o CRUD inteiro pelo HTTP.
 
 ## Licença
 

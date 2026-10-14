@@ -110,14 +110,14 @@ Severidade dos gaps: **Crítica** = quebra o isolamento ou a correção do frame
   - Commit quando a função devolve `nil`; rollback em erro ou panic (o panic continua subindo).
   - Chamada dentro de outra transação, abre um savepoint: o erro desfaz só o trabalho interno e a externa decide se segue.
   - A chave da transação no `ctx` é o pool, então com mais de um banco uma transação não captura queries de outro.
-  - Exemplo em `internal/preas/auth`: o `Login` grava a sessão (que revoga a anterior) e assina o token na mesma transação; se a assinatura falha, a sessão anterior continua valendo. Isso corrigia um bug real do exemplo.
+  - Exemplo em `example/internal/preas/auth`: o `Login` grava a sessão (que revoga a anterior) e assina o token na mesma transação; se a assinatura falha, a sessão anterior continua valendo. Isso corrigia um bug real do exemplo.
   - Ficou para depois: nível de isolamento e transação só de leitura (`TransactionWith(ctx, opts, fn)`), quando houver necessidade.
 
 ### CLI
 
 | Sev. | Gap | Onde |
 |---|---|---|
-| Baixa | Faltam `prea new` (scaffold de projeto) e `prea dev` (hot reload); o `prea run` e o `prea migrate` dependem de `./cmd/server`. **Decisão:** vêm depois da separação em módulos (passo 5), junto do `prea.go` (passo 6). | `cmd/prea` |
+| Baixa | Faltam `prea new` (scaffold de projeto) e `prea dev` (hot reload); o `prea run` e o `prea migrate` dependem de `./cmd/server`. **Decisão:** vêm junto do `prea.go` (passo 6), agora que os módulos estão separados. | `cmd/prea` |
 
 **Resolvidos:**
 - **Nomes:** letras em camel case ou separadas por `_` (`order_item`, `OrderItem`); números continuam recusados (`order123`). Cada parte recebe a forma da convenção: pacote `orderitem`, tipo `OrderItem`, tabela `order_item`, rota `/order-item` e arquivo de middleware `rate_limit.go`.
@@ -125,21 +125,22 @@ Severidade dos gaps: **Crítica** = quebra o isolamento ou a correção do frame
 - **Testes pesados do gerador** (`cmd/prea`), em três camadas:
   - unidade: nomes e a edição do `preas.go` em vários formatos;
   - comportamento: arquivos, conteúdo e registro, e o projeto intacto em todo erro;
-  - projeto gerado: um projeto novo, ligado ao framework por `replace`, passa por `go vet` e `go test -race`; o teste de dentro confere as rotas e, com banco, faz o CRUD pelo HTTP. Mutações nos templates (tirar o `TrimSpace`, trocar a rota) são pegas.
+  - projeto gerado: um projeto novo, ligado aos módulos locais do framework por `replace`, passa por `go vet` e `go test -race`; o teste de dentro confere as rotas e, com banco, faz o CRUD pelo HTTP. Mutações nos templates (tirar o `TrimSpace`, trocar a rota) são pegas.
 
-**Decisão (não é gap):** o caminho fixo `frameworkModule = "prea"` está certo: com a separação em módulos, tudo será importado de `prea/<pacote>`.
+**Decisão (não é gap):** o caminho fixo `frameworkModule = "github.com/prea-framework/prea"` está certo: cada pacote do framework é importado de `<frameworkModule>/<pacote>`.
 
 ### Estrutura e qualidade
 
 | Sev. | Gap | Onde |
 |---|---|---|
-| Baixa | O teste de integração do banco só roda com env; não há CI nem docker-compose para Postgres local. | — |
+| Baixa | O teste de integração do banco só roda com env; não há docker-compose para Postgres local (o CI sobe o seu). | — |
 
 **Resolvidos:**
-- **Código morto em `common`:** o pacote foi removido, junto com o `Stoi64` e o `ThrowException`, que não eram usados. Os erros genéricos (`ErrNotFound`, `ErrUnauthorized`...) foram substituídos: erros de HTTP usam `core.NewError(http.StatusX, msg)`, com as constantes do `net/http`, e cada pacote declara os próprios erros (`database.ErrNotFound`, `database.ErrConflict`, `security.ErrInvalidToken`), que o `core.Error` converte em status.
+- **Código morto em `common`:** o pacote foi removido, junto com o `Stoi64` e o `ThrowException`, que não eram usados. Os erros genéricos (`ErrNotFound`, `ErrUnauthorized`...) foram substituídos: erros de HTTP usam `core.NewError(http.StatusX, msg)`, com as constantes do `net/http`, e cada pacote declara os próprios erros (`database.ErrNotFound`, `database.ErrConflict`, `security.ErrInvalidToken`), que dizem o próprio status (`HTTPStatus()`) ao `core.Error`.
+- **Um módulo só (passo 5):** o framework era um módulo chamado `prea`, sem domínio, e o `core` importava o `database` e o `security`, levando o pgx, o goose e o JWT a todo binário. Agora cada pacote é um módulo em `github.com/prea-framework/prea/<pacote>`, ligados por um `go.work` commitado. O `core` só depende de `di`, `config` e `logger`: os erros dizem o próprio status, e o banco entra pelo gancho `core.App.Setup`. A app de exemplo foi para `example/`, e um CI testa todos os módulos e confere os requires. O registro está em [docs/roadmap/05-modulos-go.md](docs/roadmap/05-modulos-go.md).
 
 **Decisões (não são gaps):**
-- A app de exemplo (`internal/preas`) sai do repositório quando o framework for dividido em módulos (passo 5).
+- A app de exemplo (`example/`) sai do repositório quando virar o template do `prea new` (passo 6).
 - O acoplamento do `middleware.Auth` com `auth/dtos` é do exemplo. Os preás `user` e `auth` serão refeitos do zero, então eles não ganham testes de service e handler agora.
 
 ---
