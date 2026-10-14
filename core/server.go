@@ -15,14 +15,15 @@ import (
 	"github.com/prea-framework/prea/logger"
 )
 
-// Server configures the HTTP server. Zero fields use the defaults below.
+// Server configures the HTTP server. Zero fields use the defaults below; the
+// yaml tags read it from the server block of the config (prea.Run does).
 type Server struct {
-	ReadHeaderTimeout time.Duration // default 5s; protects against slowloris
-	ReadTimeout       time.Duration // default 30s; whole request, body included
-	WriteTimeout      time.Duration // default 30s; raise it for streaming or slow downloads
-	IdleTimeout       time.Duration // default 120s; keep-alive connections
-	ShutdownTimeout   time.Duration // default 15s; time in-flight requests get to finish
-	MaxHeaderBytes    int           // default 1 MB
+	ReadHeaderTimeout time.Duration `yaml:"read_header_timeout"` // default 5s; protects against slowloris
+	ReadTimeout       time.Duration `yaml:"read_timeout"`        // default 30s; whole request, body included
+	WriteTimeout      time.Duration `yaml:"write_timeout"`       // default 30s; raise it for streaming or slow downloads
+	IdleTimeout       time.Duration `yaml:"idle_timeout"`        // default 120s; keep-alive connections
+	ShutdownTimeout   time.Duration `yaml:"shutdown_timeout"`    // default 15s; time in-flight requests get to finish
+	MaxHeaderBytes    int           `yaml:"max_header_bytes"`    // default 1 MB
 }
 
 func (s Server) http(handler http.Handler) *http.Server {

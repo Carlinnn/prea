@@ -42,7 +42,7 @@ func SetSignKey(key string) error {
 
 func signKey() ([]byte, error) {
 	if len(SignKey) < MinKeySize {
-		return nil, fmt.Errorf("security: the jwt secret must have at least %d bytes (got %d)", MinKeySize, len(SignKey))
+		return nil, fmt.Errorf("security: the jwt secret must have at least %d bytes (got %d): set security.jwt.secret", MinKeySize, len(SignKey))
 	}
 	return SignKey, nil
 }
