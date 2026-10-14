@@ -20,7 +20,7 @@ var profileFlag = &cli.StringFlag{
 func runCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "run",
-		Usage: "Build and run the project server (./cmd/server)",
+		Usage: "Build and run the project (the main package at the root)",
 		Flags: []cli.Flag{profileFlag},
 		Action: func(ctx context.Context, cmd *cli.Command) error {
 			return runServer(ctx, cmd)
@@ -28,9 +28,9 @@ func runCommand() *cli.Command {
 	}
 }
 
-// runServer builds ./cmd/server and runs it with the profile and env, until
-// it exits. It runs the binary directly (not via go run) so it gets the
-// signals and can shut down gracefully.
+// runServer builds the main package at the project root and runs it with
+// the profile and env, until it exits. It runs the binary directly (not via
+// go run) so it gets the signals and can shut down gracefully.
 func runServer(ctx context.Context, cmd *cli.Command, env ...string) error {
 	dir, err := os.MkdirTemp("", "prea-run")
 	if err != nil {
@@ -39,7 +39,7 @@ func runServer(ctx context.Context, cmd *cli.Command, env ...string) error {
 	defer os.RemoveAll(dir)
 
 	bin := filepath.Join(dir, "server")
-	build := exec.CommandContext(ctx, "go", "build", "-o", bin, "./cmd/server")
+	build := exec.CommandContext(ctx, "go", "build", "-o", bin, ".")
 	build.Stdout, build.Stderr = os.Stdout, os.Stderr
 	if err := build.Run(); err != nil {
 		return fmt.Errorf("build: %w", err)

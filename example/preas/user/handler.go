@@ -2,8 +2,8 @@ package user
 
 import (
 	"github.com/prea-framework/prea/core"
-	"github.com/prea-framework/prea/example/internal/middleware"
-	"github.com/prea-framework/prea/example/internal/preas/user/dtos"
+	"github.com/prea-framework/prea/example/middleware"
+	"github.com/prea-framework/prea/example/preas/user/dtos"
 	"net/http"
 
 	"github.com/gin-gonic/gin"

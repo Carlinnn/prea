@@ -1,11 +1,10 @@
 package preas
 
 import (
-	"time"
-
+	"github.com/prea-framework/prea"
 	"github.com/prea-framework/prea/core"
-	"github.com/prea-framework/prea/example/internal/preas/auth"
-	"github.com/prea-framework/prea/example/internal/preas/user"
+	"github.com/prea-framework/prea/example/preas/auth"
+	"github.com/prea-framework/prea/example/preas/user"
 )
 
 var Modules = []*core.Module{
@@ -19,11 +18,9 @@ var Security = core.Security{
 	Headers: core.DefaultHeaders,
 }
 
-var Server = core.Server{
-	ReadTimeout:     30 * time.Second,
-	WriteTimeout:    30 * time.Second,
-	ShutdownTimeout: 15 * time.Second,
-}
+// Logging left empty takes logging.level and logging.format from the
+// profile: debug in dev, json in prod.
+var Logging = prea.Logging{}
 
 var Middlewares = []any{
 	core.RequestLogger,

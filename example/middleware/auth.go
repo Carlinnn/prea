@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/prea-framework/prea/core"
-	"github.com/prea-framework/prea/example/internal/preas/auth/dtos"
+	"github.com/prea-framework/prea/example/preas/auth/dtos"
 	"github.com/prea-framework/prea/security"
 
 	"github.com/gin-gonic/gin"

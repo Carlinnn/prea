@@ -3,7 +3,7 @@ package user
 import (
 	"context"
 	"github.com/prea-framework/prea/database"
-	"github.com/prea-framework/prea/example/internal/preas/user/dtos"
+	"github.com/prea-framework/prea/example/preas/user/dtos"
 	"github.com/prea-framework/prea/security"
 	"time"
 )
