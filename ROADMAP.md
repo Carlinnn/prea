@@ -12,18 +12,17 @@ Severidade dos gaps: **Crítica** = quebra o isolamento ou a correção do frame
 
 | Sev. | Gap | Onde |
 |---|---|---|
-| Baixa | Sem refresh token: quando o token expira, é preciso fazer login de novo. | `auth` |
+| Média | Não há autenticação pronta: middleware que exige o token, sessões revogáveis e checagem de dono. A app de exemplo tinha (`middleware.Auth`, o `jti` em `users.token`, `middleware.Owner`, `POST /auth/logout`) e saiu no passo 6. **Decisão:** vem com a lib de segurança (passo 7). | `security` |
+| Baixa | Sem refresh token: quando o token expira, é preciso fazer login de novo. | `security` |
 
 **Resolvidos:**
-- O segredo do JWT (`security.jwt.secret`) é obrigatório, com pelo menos 32 bytes. Sem ele, a app não sobe (`security.SetSignKey` falha no `main`) e `CreateToken`/`DecodeToken` devolvem erro. Os testes definem `security.SignKey`.
+- O segredo do JWT (`security.jwt.secret`) é aplicado só se existir, porque uma app sem JWT não precisa dele. Com ele, precisa ter pelo menos 32 bytes, ou a app não sobe. Sem ele, `CreateToken`/`DecodeToken` recusam assinar e validar, em vez de usar uma chave vazia. Os testes definem `security.SignKey`.
 - `DecodeToken` aceita só HS256 (`jwt.WithValidMethods`).
 - CORS, CSRF (via `net/http.CrossOriginProtection`), headers de segurança e proxies confiáveis são configurados em `core.Security` no `preas.go`. Por padrão, nenhum proxy é confiável.
-- Existe o 403 (`core.NewError(http.StatusForbidden, ...)`). O exemplo tem o `middleware.Owner`: só o dono altera ou apaga o próprio usuário.
-- Revogação: o `jti` do token fica em `users.token` e o `middleware.Auth` confere com o banco. Um novo login invalida o token anterior, e existe o `POST /auth/logout`.
-- O modo do gin vem de `server.mode`, que o `main` aplica depois de carregar a config. Antes, o gin lia o `GIN_MODE` antes de o `.env` ser carregado.
+- Existe o 403 (`core.NewError(http.StatusForbidden, ...)`).
+- O modo do gin vem de `server.mode`, que o `prea.Run` aplica depois de carregar a config. Antes, o gin lia o `GIN_MODE` antes de o `.env` ser carregado.
 
 **Decisões (não são gaps):**
-- O cadastro com `profile`, a listagem aberta para quem está logado e o login sem rate limit fazem parte do exemplo, que é propositalmente simples.
 - Quem decide se o token tem `exp` é quem codifica o token.
 - As rotas geradas são públicas; para fechá-las, use um middleware.
 
@@ -110,22 +109,29 @@ Severidade dos gaps: **Crítica** = quebra o isolamento ou a correção do frame
   - Commit quando a função devolve `nil`; rollback em erro ou panic (o panic continua subindo).
   - Chamada dentro de outra transação, abre um savepoint: o erro desfaz só o trabalho interno e a externa decide se segue.
   - A chave da transação no `ctx` é o pool, então com mais de um banco uma transação não captura queries de outro.
-  - Exemplo em `example/internal/preas/auth`: o `Login` grava a sessão (que revoga a anterior) e assina o token na mesma transação; se a assinatura falha, a sessão anterior continua valendo. Isso corrigia um bug real do exemplo.
+  - O login da antiga app de exemplo gravava a sessão (que revogava a anterior) e assinava o token na mesma transação; se a assinatura falhasse, a sessão anterior continuava valendo. Isso corrigiu um bug real.
   - Ficou para depois: nível de isolamento e transação só de leitura (`TransactionWith(ctx, opts, fn)`), quando houver necessidade.
 
 ### CLI
 
 | Sev. | Gap | Onde |
 |---|---|---|
-| Baixa | Faltam `prea new` (scaffold de projeto) e `prea dev` (hot reload); o `prea run` e o `prea migrate` dependem de `./cmd/server`. **Decisão:** vêm junto do `prea.go` (passo 6), agora que os módulos estão separados. | `cmd/prea` |
+| — | Nenhum gap aberto. | |
 
 **Resolvidos:**
+- **Projeto e subida (passo 6):** antes, o `main.go` de uma app tinha 90 linhas de subida, todas internas do framework, e não havia como criar um projeto.
+  - Agora o `main.go` só chama `prea.Run(prea.Config{...})` com as variáveis do `preas/preas.go`. Ele carrega a config, exige `server.port` e `server.mode`, abre o banco, roda o `prea migrate` e serve.
+  - O `prea new` cria o projeto (`--module`, `--with-db`).
+  - O `prea dev` reinicia a app a cada mudança.
+  - O `prea build` gera o binário.
+  - O `prea tests` roda os testes com o profile `tests`; o `prea.Test` monta a app para o `httptest`.
+  - A app de exemplo virou o template do `prea new` e saiu do repositório.
 - **Nomes:** letras em camel case ou separadas por `_` (`order_item`, `OrderItem`); números continuam recusados (`order123`). Cada parte recebe a forma da convenção: pacote `orderitem`, tipo `OrderItem`, tabela `order_item`, rota `/order-item` e arquivo de middleware `rate_limit.go`.
 - **Validação antes de gerar:** palavra-chave do Go, pacote com o nome de um import do `preas.go`, preá ou middleware existente e identificador já declarado no pacote de middlewares. O `preas.go` novo é calculado e validado **antes** de criar qualquer arquivo; um comando que falha não altera o projeto.
 - **Testes pesados do gerador** (`cmd/prea`), em três camadas:
   - unidade: nomes e a edição do `preas.go` em vários formatos;
   - comportamento: arquivos, conteúdo e registro, e o projeto intacto em todo erro;
-  - projeto gerado: um projeto novo, ligado aos módulos locais do framework por `replace`, passa por `go vet` e `go test -race`; o teste de dentro confere as rotas e, com banco, faz o CRUD pelo HTTP. Mutações nos templates (tirar o `TrimSpace`, trocar a rota) são pegas.
+  - projeto gerado: um projeto do `prea new --local`, ligado a este clone, passa por `go vet` e `go test -race`; o teste de dentro confere as rotas e, com banco, faz o CRUD pelo HTTP. Mutações nos templates (tirar o `TrimSpace`, trocar a rota) são pegas.
 
 **Decisão (não é gap):** o caminho fixo `frameworkModule = "github.com/prea-framework/prea"` está certo: cada pacote do framework é importado de `<frameworkModule>/<pacote>`.
 
@@ -137,11 +143,7 @@ Severidade dos gaps: **Crítica** = quebra o isolamento ou a correção do frame
 
 **Resolvidos:**
 - **Código morto em `common`:** o pacote foi removido, junto com o `Stoi64` e o `ThrowException`, que não eram usados. Os erros genéricos (`ErrNotFound`, `ErrUnauthorized`...) foram substituídos: erros de HTTP usam `core.NewError(http.StatusX, msg)`, com as constantes do `net/http`, e cada pacote declara os próprios erros (`database.ErrNotFound`, `database.ErrConflict`, `security.ErrInvalidToken`), que dizem o próprio status (`HTTPStatus()`) ao `core.Error`.
-- **Um módulo só (passo 5):** o framework era um módulo chamado `prea`, sem domínio, e o `core` importava o `database` e o `security`, levando o pgx, o goose e o JWT a todo binário. Agora cada pacote é um módulo em `github.com/prea-framework/prea/<pacote>`, ligados por um `go.work` commitado. O `core` só depende de `di`, `config` e `logger`: os erros dizem o próprio status, e o banco entra pelo gancho `core.App.Setup`. A app de exemplo foi para `example/`, e um CI testa todos os módulos e confere os requires.
-
-**Decisões (não são gaps):**
-- A app de exemplo (`example/`) sai do repositório quando virar o template do `prea new` (passo 6).
-- O acoplamento do `middleware.Auth` com `auth/dtos` é do exemplo. Os preás `user` e `auth` serão refeitos do zero, então eles não ganham testes de service e handler agora.
+- **Um módulo só (passo 5):** o framework era um módulo chamado `prea`, sem domínio, e o `core` importava o `database` e o `security`, levando o pgx, o goose e o JWT a todo binário. Agora cada pacote é um módulo em `github.com/prea-framework/prea/<pacote>`, ligados por um `go.work` commitado. O `core` só depende de `di`, `config` e `logger`: os erros dizem o próprio status, e o banco entra pelo gancho `core.App.Setup`. Um CI testa todos os módulos e confere os requires.
 
 ---
 

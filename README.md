@@ -27,7 +27,7 @@ Framework web modular para Go, inspirado no Spring e no Angular. Ele traz módul
 ## Requisitos
 
 - Go **1.26+**
-- PostgreSQL (com `gen_random_uuid()`, nativo a partir do 13)
+- PostgreSQL, se a app usar banco (com `gen_random_uuid()`, nativo a partir do 13)
 
 ## Começando
 
@@ -36,64 +36,88 @@ Framework web modular para Go, inspirado no Spring e no Angular. Ele traz módul
 curl -fsSL https://raw.githubusercontent.com/prea-framework/prea/main/install.sh | sh
 # uma versão: ... | PREA_VERSION=v0.0.1 sh; num clone: go install ./cmd/prea
 
-# 2. Configuração (a app de exemplo fica em example/)
-cd example
-cp .env.example .env        # preencha DATABASE_URL e JWT_SECRET (openssl rand -base64 32)
+# 2. Um projeto novo
+prea new loja --with-db     # sem --with-db: só o preá health, sem banco
+cd loja
+cp .env.example .env        # preencha DATABASE_URL e TEST_DATABASE_URL
 
-# 3. Subir o servidor
-prea run --profile dev      # compila ./cmd/server e roda com o profile dev,
-                            # que gera e aplica as migrations a partir dos models
+# 3. Rodar com hot reload: o profile dev gera e aplica as migrations a partir dos models
+prea dev
 ```
 
 Para testar:
 
 ```bash
-# cadastro (rota pública)
-curl -X POST localhost:8000/users -H 'Content-Type: application/json' \
-  -d '{"name":"Pedro","username":"pedro","email":"p@x.com","password":"s3cret","profile":1}'
+curl localhost:8000/health
+curl -X POST localhost:8000/item -H 'Content-Type: application/json' -d '{"name": "caneta"}'
 
-# login → { "code": 1, "data": { "token": "...", "payload": {...} } }
-curl -X POST localhost:8000/auth/login -H 'Content-Type: application/json' \
-  -d '{"username":"pedro","password":"s3cret"}'
-
-# rota protegida
-curl localhost:8000/users -H "Authorization: Bearer <token>"
+prea tests                  # os testes, com o profile tests
+prea build                  # o binário em bin/loja; leve config/ e migrations/ junto no deploy
 ```
 
 ## Estrutura do projeto
 
+Um projeto criado pelo `prea new`:
+
+```
+loja/
+├── main.go                  # prea.Run(prea.Config{Modules: preas.Modules, ...})
+├── config/                  # application.yaml e os profiles dev, prod e tests
+├── migrations/              # 0.0.1_models.sql...
+├── middleware/              # middlewares da app (prea g m)
+├── preas/
+│   ├── preas.go             # Modules, Middlewares, Security e Logging: o que a app declara
+│   ├── health/              # GET /health, com o teste ao lado (health_test.go)
+│   └── item/                # com --with-db: o CRUD gerado pelo prea g p
+└── tests/                   # os testes de ponta a ponta, da app inteira
+```
+
+```go
+// main.go: só liga as variáveis do preas/preas.go ao prea.Run
+func main() {
+	prea.Run(prea.Config{
+		Modules:     preas.Modules,
+		Middlewares: preas.Middlewares,
+		Security:    preas.Security,
+		Logging:     preas.Logging,
+	})
+}
+```
+
+O `prea.Run`, em ordem:
+1. carrega `config/` com o profile ativo;
+2. confere as chaves obrigatórias e configura os logs;
+3. abre o banco de `database.url`, se houver;
+4. com `PREA_MIGRATE` (o `prea migrate`), roda o comando e sai;
+5. aplica o segredo JWT, se houver;
+6. monta os módulos, gera e aplica as migrations, confere o schema e serve até SIGINT/SIGTERM.
+
+Este repositório:
+
 ```
 prea/
+├── prea.go                  # módulo da raiz: prea.Run e prea.Test, que ligam os outros
 ├── go.work                  # liga os módulos no desenvolvimento
 ├── cmd/prea/                # módulo da CLI (instalável; não depende do framework)
-│   └── templates/           # templates embutidos no binário
+│   └── templates/           # o projeto do prea new (new/) e os preás do prea g p (prea/)
 ├── core/                    # módulo: Module, App, Router, Middleware, Security, respostas e `core.NewError`
 ├── di/                      # módulo: container de injeção
 ├── database/                # módulo: BaseRepository, Prepare, schema e migrations
 ├── security/                # módulo: JWT e hash de senha (argon2id)
 ├── logger/                  # módulo: logs por nível (slog)
-├── config/                  # módulo: carrega a config (koanf) e os profiles
-└── example/                 # a app de exemplo, um módulo à parte
-    ├── cmd/server/          # entrypoint
-    ├── config/              # application.yaml e um arquivo por profile
-    ├── migrations/          # 0.0.1_models.sql...
-    └── internal/            # só o código da aplicação
-        ├── preas/
-        │   ├── preas.go     # módulos, segurança HTTP e middlewares globais
-        │   ├── user/
-        │   └── auth/
-        └── middleware/      # middlewares da aplicação
+└── config/                  # módulo: carrega a config (koanf) e os profiles
 ```
 
 Direção das dependências: **CLI → nada**, **app → framework**, **framework → nada da app**.
 
 ### Módulos Go
 
-Cada pasta do framework é um módulo, instalado e versionado à parte. Quem usa só o `core` não leva o driver do banco nem o JWT:
+Cada pasta do framework é um módulo, instalado e versionado à parte. O da raiz (`prea.Run`) liga todos e é o que um projeto do `prea new` usa; quem monta o `core.App` à mão e usa só o `core` não leva o driver do banco nem o JWT:
 
 | Módulo | Depende de (framework) | Dependências externas |
 |---|---|---|
-| `github.com/prea-framework/prea/di` | — | — |
+| `github.com/prea-framework/prea` | `core`, `database`, `security`, `config`, `logger`, `di` | gin, pgx |
+| `.../di` | — | — |
 | `.../logger` | — | — |
 | `.../config` | — | koanf, mapstructure, godotenv |
 | `.../security` | — | golang-jwt, x/crypto |
@@ -102,22 +126,23 @@ Cada pasta do framework é um módulo, instalado e versionado à parte. Quem usa
 | `.../cmd/prea` | — | urfave/cli |
 
 ```bash
-go get github.com/prea-framework/prea/core github.com/prea-framework/prea/database
+go get github.com/prea-framework/prea                  # tudo, com o prea.Run
+go get github.com/prea-framework/prea/core             # só HTTP e DI
 ```
 
 - **O `core` não conhece o banco nem a segurança.** Os erros do `database` e do `security` dizem o próprio status (`HTTPStatus()`, veja [Erros e respostas](#erros-e-respostas)), e o banco entra na subida pelo gancho `core.App.Setup`:
   ```go
   core.App{..., Globals: []any{db}, Setup: database.Setup(db, opts)}
   ```
-- **Versões:** uma tag por módulo, com o prefixo da pasta (`core/v0.0.1`, `cmd/prea/v0.0.1`). Todos os módulos ficam na mesma major; as minors e os patches andam separados, conforme cada um muda. A versão atual é a pré-alfa `v0.0.1`.
-- **No repositório:** o `go.work` commitado liga os módulos pelo disco, então um clone compila sem `replace`. Um módulo que passa a exigir uma versão nova de um irmão só funciona fora do workspace depois que a tag dessa versão é publicada. Como a raiz não é um módulo, os comandos usam o caminho: `go test github.com/prea-framework/prea/...`.
+- **Versões:** uma tag por módulo, com o prefixo da pasta (`core/v0.0.1`, `cmd/prea/v0.0.1`); a do módulo da raiz não tem prefixo (`v0.0.2`). Todos os módulos ficam na mesma major; as minors e os patches andam separados, conforme cada um muda. A versão atual é a pré-alfa `v0.0.1`.
+- **No repositório:** o `go.work` commitado liga os módulos pelo disco, então um clone compila sem `replace`. Um módulo que passa a exigir uma versão nova de um irmão só funciona fora do workspace depois que a tag dessa versão é publicada. Na raiz, o `./...` cobre só o módulo da raiz, porque os outros são módulos aninhados; os comandos usam o caminho: `go test github.com/prea-framework/prea/...`.
 - **O CI** confere que cada módulo importa exatamente os módulos do framework que o seu `go.mod` exige. No workspace, um import sem `require` compila, e é essa conferência que impede o `core` de voltar a importar o `database`.
 
 ## Conceitos
 
 ### Módulos (preás)
 
-Cada funcionalidade é um módulo em `internal/preas/<nome>/`:
+Cada funcionalidade é um módulo em `preas/<nome>/`:
 
 ```
 user/
@@ -150,7 +175,7 @@ var Module = &core.Module{
 }
 ```
 
-Os módulos são ligados à aplicação em `internal/preas/preas.go`. O `prea g p` registra o módulo novo ali automaticamente.
+Os módulos são ligados à aplicação na `var Modules` do `preas/preas.go`. O `prea g p` registra o módulo novo ali automaticamente.
 
 ### Injeção de dependência
 
@@ -182,7 +207,7 @@ Use sempre `inject:""`. A forma curta `inject` sem valor não é uma tag válida
 **Componentes nomeados.** O nome é opcional, como um token do Angular. Ele serve para quando há mais de um componente do mesmo tipo:
 
 ```go
-// cmd/server/main.go
+// num core.App montado à mão (o prea.Run abre só o pool de database.url)
 Globals: []any{mainDB, di.Named("analytics", analyticsDB)}
 
 // em um módulo; Named e Export podem ser combinados em qualquer ordem
@@ -309,7 +334,7 @@ type Player struct {
 | `create` | apaga as tabelas dos models e as cria de novo |
 | `create-drop` | `create`, e apaga as tabelas no desligamento; bom para testes |
 
-O schema é aplicado numa transação, depois da injeção e antes dos `Init`, então um `Init` já encontra as tabelas. Para manter histórico e revisar as mudanças, use as [migrations](#migrations): na app de exemplo, a base só valida (`schema: validate`) e o dev gera as migrations a partir dos models.
+O schema é aplicado numa transação, depois da injeção e antes dos `Init`, então um `Init` já encontra as tabelas. Para manter histórico e revisar as mudanças, use as [migrations](#migrations): num projeto do `prea new --with-db`, a base só valida (`schema: validate`) e o dev gera as migrations a partir dos models.
 
 #### Migrations
 
@@ -460,7 +485,7 @@ Existem dois tipos de middleware:
 - **Função** (`prea g m <Nome> --func`): um `core.Middleware`, que é o mesmo que `gin.HandlerFunc`, sem injeção.
 
 ```go
-// componente: internal/middleware/auth.go
+// componente: middleware/auth.go
 type Auth struct {
 	Sessions Sessions `inject:""` // interface; user.Service a implementa
 }
@@ -491,7 +516,7 @@ var Module = &core.Module{
 - **Erros na subida, não em produção:** declarar `&middleware.Auth{}` ou uma struct sem `Handle`.
 - **Cuidado com o atalho** `(&middleware.Auth{}).Handle`. Ele compila, mas cria um `Auth` fora do container e sem injeção, e dá panic na primeira requisição. Passe sempre o valor `middleware.Auth{}`.
 
-Para depender de outro preá sem ciclo de imports, use uma interface, como `Sessions` no exemplo.
+Para depender de outro preá sem ciclo de imports, use uma interface: o `auth` declara um `Sessions`, e o `user.Service` o implementa.
 
 A ordem de execução é **segurança → global → módulo → rota → handler**. Chame `c.Next()` para continuar ou `c.Abort()` para parar a cadeia.
 
@@ -560,17 +585,19 @@ Sem `Code`, ele vem do status HTTP: abaixo de 400 é `SuccessCode` (1), abaixo d
 
 ### Servidor
 
-Os timeouts ficam em `internal/preas/preas.go`. Um campo zerado usa o padrão:
+O servidor vem da config. `server.port` e `server.mode` (`debug`, `release` ou `test`) são obrigatórias; os timeouts têm padrão, e o yaml só sobrescreve o que define:
 
-```go
-var Server = core.Server{
-	ReadHeaderTimeout: 5 * time.Second,   // padrão 5s (proteção contra slowloris)
-	ReadTimeout:       30 * time.Second,  // padrão 30s, corpo incluído
-	WriteTimeout:      30 * time.Second,  // padrão 30s; aumente para streaming e downloads longos
-	IdleTimeout:       120 * time.Second, // padrão 120s, conexões keep-alive
-	ShutdownTimeout:   15 * time.Second,  // padrão 15s, tempo para as requisições em andamento terminarem
-	MaxHeaderBytes:    1 << 20,           // padrão 1 MB
-}
+```yaml
+server:
+  port: 8000
+  mode: debug
+  read_header_timeout: 5s   # padrão 5s (proteção contra slowloris)
+  read_timeout: 30s         # padrão 30s, corpo incluído
+  write_timeout: 30s        # padrão 30s; aumente para streaming e downloads longos
+  idle_timeout: 120s        # padrão 120s, conexões keep-alive
+  shutdown_timeout: 15s     # padrão 15s, tempo para as requisições em andamento terminarem
+  max_header_bytes: 1048576 # padrão 1 MB
+  trusted_proxies: []       # padrão nenhum; o Security.TrustedProxies do código tem precedência
 ```
 
 **Subida e desligamento:**
@@ -584,7 +611,7 @@ O tamanho do pool de conexões vai no próprio DSN: `?pool_max_conns=20` (o padr
 
 ### Segurança HTTP
 
-A configuração fica em `internal/preas/preas.go` e roda antes de qualquer middleware:
+A configuração fica na `var Security` do `preas/preas.go` e roda antes de qualquer middleware. As origens do CORS ficam aqui, no código, e não no profile:
 
 ```go
 var Security = core.Security{
@@ -630,34 +657,31 @@ var Security = core.Security{
 
 ### Autenticação
 
-| Rota | O que faz |
-|---|---|
-| `POST /auth/login` | recebe `{username, password}` e devolve `{token, payload}` com um JWT HS256 válido por 1h |
-| `POST /auth/validate` | recebe `{token}` e devolve as claims, ou 401 |
-| `POST /auth/logout` | encerra a sessão: o token deixa de valer (204) |
-| `middleware.Auth` | componente; `h.Auth.Handle` exige `Authorization: Bearer <token>` de uma sessão ativa e guarda as claims em `c.Get(middleware.ClaimsKey)` |
-| `middleware.Owner` | depois do `Auth`, só deixa passar se o `:id` da rota for o do usuário logado (403 se não for) |
+O pacote `security` traz as peças:
+- **JWT:** `security.Jwt[M]` cria e valida tokens HS256 (só esse algoritmo é aceito), com o payload `M` nas claims. A chave vem de `security.jwt.secret` e precisa ter 32 bytes ou mais. Sem ela, a app sobe normalmente, e só criar ou validar um token dá erro.
+- **Senhas:** `security.HashPassword` e `security.ComparePassword`, com argon2id.
+- **Erros:** um token inválido responde 401 pelo `core.Error`.
 
-As senhas são guardadas com hash argon2id. Os tokens são HS256, e só esse algoritmo é aceito. O `exp` e as outras claims ficam por conta de quem cria o token.
-
-**Sessão revogável.** No login, o `jti` do token é gravado em `users.token`, e o `Auth` só aceita o token cujo `jti` é o ativo. Um novo login invalida o token anterior, e o logout invalida o atual.
-
-> `user` e `auth` são um exemplo, propositalmente simples: o cadastro aceita `profile` e não há rate limit no login.
+O middleware de autenticação, as sessões revogáveis e os papéis entram com a lib de segurança (veja o [ROADMAP](ROADMAP.md)).
 
 ## CLI
 
 | Comando | O que faz |
 |---|---|
-| `prea run [--profile dev]` | compila e sobe o `./cmd/server`, repassando os sinais para o desligamento gracioso; a porta vem do `server.port` da config |
-| `prea g p <Nome>` | cria `internal/preas/<nome>/` (module, handler, service, repository, model e dtos) e registra o módulo em `preas.go` |
-| `prea g m <Nome> [--func]` | cria `internal/middleware/<nome>.go`: um componente (com injeção), ou uma função com `--func` |
+| `prea new <nome> [--module] [--with-db]` | cria um projeto (veja [Estrutura do projeto](#estrutura-do-projeto)). `--module` é o caminho do módulo Go, que vai no `go.mod` e nos imports (padrão: o nome); `--with-db` liga o banco nos profiles e gera um preá de CRUD; `--local <dir>` usa um clone do framework em vez de baixá-lo |
+| `prea dev [--profile]` | compila e sobe o projeto (profile `dev` por padrão) e o reinicia quando um `.go`, o `config/` ou o `.env` muda. Um erro de compilação mantém a versão que está rodando |
+| `prea run [--profile]` | compila e sobe o projeto, repassando os sinais para o desligamento gracioso |
+| `prea build [flags]` | gera o binário em `bin/<nome>`; as flags vão para o `go build` (`-o`, `-trimpath`...), e o `GOOS`/`GOARCH` vêm do ambiente |
+| `prea tests [flags] [pacotes]` | `go test` com o profile `tests`; sem pacotes, `./...` |
+| `prea g p <Nome>` | cria `preas/<nome>/` (module, handler, service, repository, model e dtos) e registra o módulo em `preas/preas.go` |
+| `prea g m <Nome> [--func]` | cria `middleware/<nome>.go`: um componente (com injeção), ou uma função com `--func` |
 | `prea migrate create <nome>` | cria `migrations/<próxima versão>_<nome>.sql`, para escrever à mão |
 | `prea migrate up [versão]` | aplica as pendentes, ou até a versão |
 | `prea migrate down [n]` | desfaz as últimas `n` aplicadas (padrão 1) |
 | `prea migrate status` | lista as migrations: aplicadas (com a data) ou pendentes |
 | `prea migrate validate` | confere os arquivos sem tocar no banco; para CI |
 
-Os `prea migrate` aceitam `--profile` (`prea migrate --profile dev up`). Eles compilam o `./cmd/server` e o rodam em **modo de inspeção** (`PREA_MIGRATE`, a `database.MigrateEnv`): o `main` vê a variável e, em vez de subir o servidor, roda o `database.Command` com a própria config e o próprio banco. Assim a CLI não precisa saber onde estão a config e a conexão. Na app de exemplo, isso vem antes da checagem do segredo JWT, então uma migration não exige `JWT_SECRET`.
+Os `prea migrate` aceitam `--profile` (`prea migrate --profile dev up`). Eles compilam o projeto e o rodam em **modo de inspeção** (`PREA_MIGRATE`, a `database.MigrateEnv`): o `prea.Run` vê a variável e, em vez de subir o servidor, roda o `database.Command` com a própria config e o próprio banco. Assim a CLI não precisa saber onde estão a config e a conexão. Isso vem antes da checagem do segredo JWT, então uma migration não o exige.
 
 O `g` é atalho de `generate`, o `p` de `prea` e o `m` de `middleware`. Rode a CLI na raiz do projeto: ela lê o `go.mod` para descobrir o caminho dos imports.
 
@@ -670,7 +694,7 @@ O `g` é atalho de `generate`, o `p` de `prea` e o `m` de `middleware`. Rode a C
 | tabela | `order_item` (que você cria no banco) |
 | rotas | `/order-item` (GET, GET `/:id`, POST, PATCH `/:id`, DELETE `/:id`) |
 
-No middleware, o arquivo segue a tabela: `prea g m rate_limit` cria `internal/middleware/rate_limit.go` com o tipo `RateLimit`.
+No middleware, o arquivo segue a tabela: `prea g m rate_limit` cria `middleware/rate_limit.go` com o tipo `RateLimit`.
 
 **Antes de gerar, a CLI confere tudo; se algo falha, o projeto não é alterado:**
 - o nome não pode ser uma palavra-chave do Go (`type`);
@@ -681,7 +705,7 @@ No middleware, o arquivo segue a tabela: `prea g m rate_limit` cria `internal/mi
 
 ## Configuração
 
-No estilo do Spring: `application.yaml` é a base, e `application-<profile>.yaml` a completa para o profile ativo. Os arquivos são da aplicação; na app de exemplo, ficam em `example/config/`. O carregamento usa o [koanf](https://github.com/knadh/koanf).
+No estilo do Spring: `application.yaml` é a base, e `application-<profile>.yaml` a completa para o profile ativo. Os arquivos são da aplicação e ficam em `config/`, na raiz do projeto. O carregamento usa o [koanf](https://github.com/knadh/koanf).
 
 ```yaml
 # config/application.yaml
@@ -695,10 +719,19 @@ security:
 ```
 
 - **Profile ativo:** um só, vindo de `PREA_PROFILE=dev` ou de `prea run --profile dev`. Sem profile, só a base é carregada; um arquivo que não existe é ignorado.
-- **Ambiente:** só entra onde o yaml o referencia, com `${VAR}`. O `.env` da pasta em que a app roda é lido antes (veja o `example/.env.example`) e não substitui o que já está no ambiente. Segredos ficam no ambiente, nunca no yaml commitado.
+- **Ambiente:** só entra onde o yaml o referencia, com `${VAR}`. O `.env` da pasta em que a app roda é lido antes (veja o `.env.example` do projeto) e não substitui o que já está no ambiente. Segredos ficam no ambiente, nunca no yaml commitado.
 - **Chave ausente:** uma chave que não está no yaml, ou um `${VAR}` não definido, deixa o valor zerado (`nil` em ponteiros). Quem precisa do valor valida, como o `security.SetSignKey`, que impede a subida com um segredo curto.
 
-Na app de exemplo, o `cmd/server/main.go` lê `server.port`, `server.mode` (modo do gin), `logging.level`, `logging.format`, `database.url` e `security.jwt.secret`. Ele também lê o bloco `database` (o `schema` e as `migrations`, veja [Model e schema](#model-e-schema)) e o passa ao `database.Setup`.
+As chaves que o `prea.Run` lê:
+
+| Chave | Obrigatória | Padrão |
+|---|---|---|
+| `server.port`, `server.mode` | **sim** | — |
+| `server.*` (timeouts, `max_header_bytes`, `trusted_proxies`) | não | veja [Servidor](#servidor) |
+| `logging.level`, `logging.format` | não | `info`, `text`; o `prea.Config.Logging` tem precedência |
+| `database.url` | não | sem ela, a app sobe sem banco |
+| `database.schema`, `database.migrations.*` | não | veja [Model e schema](#model-e-schema) |
+| `security.jwt.secret` | não | aplicada só se existir |
 
 **Nos componentes**, a tag `value:"chave"` preenche o campo na subida, como o `@Value` do Spring:
 
@@ -727,22 +760,45 @@ var Module = &core.Module{Name: "debug", Providers: []any{Handler{}}, Profiles: 
 
 ## Testes
 
-Na raiz, que não é um módulo, o `./...` não encontra nada; use o caminho, que cobre todos os módulos do `go.work`:
+### De uma app
+
+Os testes de cada preá ficam **ao lado do código** (`preas/item/item_test.go`, como `package item`): enxergam o que não é exportado e montam só o próprio módulo. Os de ponta a ponta, com a app inteira, ficam em `tests/`. O `prea tests` roda os dois com o profile `tests` (`config/application-tests.yaml`, com o banco de testes e `schema: create-drop`).
+
+```go
+func TestHealth(t *testing.T) {
+	app := prea.Test(t, prea.Config{Modules: []*core.Module{Module}})
+	w := httptest.NewRecorder()
+	app.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/health", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET /health: %d %s", w.Code, w.Body)
+	}
+}
+```
+
+O `prea.Test` monta a app como o `prea.Run`, mas com o profile `tests`, e devolve o handler para o `httptest`. Ele roda a partir da raiz do projeto, o primeiro `go.mod` acima da pasta do teste, e fecha a app e o banco no fim do teste.
+
+### Do framework
+
+O `./...` na raiz cobre só o módulo da raiz; use o caminho, que cobre todos os módulos do `go.work`:
 
 ```bash
 go test github.com/prea-framework/prea/...
 
-# sem os testes que compilam um projeto gerado
+# sem os testes que compilam projetos gerados
 go test -short github.com/prea-framework/prea/...
 
 # inclui os testes de integração do banco (criam as próprias tabelas com o database.schema)
 PREA_TEST_DATABASE_URL="postgres://user:pass@localhost:5432/prea_test?sslmode=disable" go test github.com/prea-framework/prea/...
 ```
 
-O gerador é testado em três camadas (`cmd/prea`):
+A CLI é testada em camadas (`cmd/prea`):
 - **unidade:** formas dos nomes, nomes inválidos e a edição do `preas.go` em vários formatos (lista vazia, numa linha, com comentários, em grupo `var (...)`, import com alias);
-- **comportamento:** gera num projeto temporário e confere arquivos, registro e conteúdo; todo comando que falha deixa o projeto intacto;
-- **projeto gerado:** gera preás e middlewares num projeto novo, ligado aos módulos locais do framework por um `replace` cada, e roda `go vet` e `go test -race` nele. O teste de dentro monta a app e confere as rotas; com o banco, faz o CRUD inteiro pelo HTTP.
+- **comportamento:** gera num projeto temporário e confere arquivos, registro e conteúdo; todo comando que falha deixa o projeto intacto. O `build` e o `tests` são conferidos com um `go` falso, que grava os argumentos e o profile;
+- **projeto gerado:**
+  - `prea new --local` cria projetos ligados a este clone, com e sem `--with-db`;
+  - o teste gera preás e middlewares neles e roda `go vet` e `prea tests`; com o banco, o CRUD inteiro pelo HTTP;
+  - `prea build`, e o binário respondendo `/health`;
+- **`prea dev`:** num projeto novo, ele sobe, reinicia quando um handler muda, mantém a versão antiga num erro de compilação e para o servidor no fim.
 
 ## Licença
 
