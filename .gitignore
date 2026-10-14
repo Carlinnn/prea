@@ -18,3 +18,5 @@
 # vendor/
 
 .env
+# Internal planning notes, kept out of the repository
+docs/

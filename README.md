@@ -2,7 +2,7 @@
 
 Framework web modular para Go, inspirado no Spring e no Angular. Ele traz módulos com injeção de dependência por tag, handlers HTTP sobre o [gin](https://github.com/gin-gonic/gin), um repositório base para Postgres com queries no estilo PDO, middlewares em três níveis e uma CLI que gera o código de cada módulo.
 
-> **Status:** pré-alfa (`v0.0.1`). A API ainda muda. Os gaps conhecidos estão no [ROADMAP.md](ROADMAP.md), e os próximos passos, em [docs/roadmap/](docs/roadmap/README.md).
+> **Status:** pré-alfa (`v0.0.1`). A API ainda muda. Os gaps conhecidos e os próximos passos estão no [ROADMAP.md](ROADMAP.md).
 
 ## Sumário
 
@@ -152,8 +152,6 @@ var Module = &core.Module{
 Os módulos são ligados à aplicação em `internal/preas/preas.go`. O `prea g p` registra o módulo novo ali automaticamente.
 
 ### Injeção de dependência
-
-> O guia completo, com a comparação com os beans do Spring, o ciclo de vida, a resolução, os erros e a migração, está em [docs/injecao-de-dependencia.md](docs/injecao-de-dependencia.md).
 
 Campos com a tag `inject:""` são preenchidos na subida:
 

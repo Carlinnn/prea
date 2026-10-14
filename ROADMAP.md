@@ -1,6 +1,6 @@
 # Roadmap do Preá
 
-Este documento lista os **gaps** do que já foi implementado (levantados lendo o código em 2026-10-10). Os **próximos passos** ficam em [docs/roadmap/](docs/roadmap/README.md): um arquivo por passo, com a proposta completa, o plano de implementação em incrementos e a ordem de prioridade.
+Este documento lista os **gaps** do que já foi implementado (levantados lendo o código em 2026-10-10). Os **próximos passos** estão no fim, um por gap aberto.
 
 Severidade dos gaps: **Crítica** = quebra o isolamento ou a correção do framework; **Alta** = risco de segurança ou perda de dados; **Média** = afeta produção ou uso real; **Baixa** = qualidade ou ergonomia.
 
@@ -82,7 +82,7 @@ Severidade dos gaps: **Crítica** = quebra o isolamento ou a correção do frame
   - `di.TestIsolation`: 8 containers em paralelo com `-race`, cada um com o seu banco, nenhum componente compartilhado e a declaração intacta;
   - `core.TestAppsAreIsolated`: dois `App` montados a partir do mesmo módulo. Esse teste falha no código antigo (`app with "test" answered "prod"`).
 
-**Plano futuro:** memória por requisição, como o `SecurityContextHolder.getContext()` e o `@RequestScope` do Spring, que guardam o dado num `ThreadLocal` acessível de qualquer lugar. Por enquanto o framework só tem singletons por container, e o estado de requisição vai explicitamente no `context.Context`/`gin.Context`, como as claims do `Auth`. Em Go não existe `ThreadLocal`; o motivo está detalhado em [docs/injecao-de-dependencia.md](docs/injecao-de-dependencia.md#9-estado-por-requisição-não-há-securitycontextholder).
+**Plano futuro:** memória por requisição, como o `SecurityContextHolder.getContext()` e o `@RequestScope` do Spring, que guardam o dado num `ThreadLocal` acessível de qualquer lugar. Por enquanto o framework só tem singletons por container, e o estado de requisição vai explicitamente no `context.Context`/`gin.Context`, como as claims do `Auth`. Em Go não existe `ThreadLocal`.
 
 ### Banco (`database`)
 
@@ -93,7 +93,7 @@ Severidade dos gaps: **Crítica** = quebra o isolamento ou a correção do frame
 | Baixa | Tabela e rota usam o nome do pacote no singular. | templates |
 
 **Resolvidos:**
-- **Migrations (passo 2):** antes só havia um `.sql` solto, e depois o `schema: update`, sem histórico. Agora há migrations versionadas (semver ou timestamp) rodadas pelo goose, com `-- prea:down` opcional, geradas a partir dos models na subida (`from_models`) e aplicadas na subida (`on_start`) ou pelo `prea migrate`. O registro de cada task está em [docs/roadmap/02-migrations.md](docs/roadmap/02-migrations.md), e o que ficou para depois, em [docs/roadmap/futuro.md](docs/roadmap/futuro.md).
+- **Migrations (passo 2):** antes só havia um `.sql` solto, e depois o `schema: update`, sem histórico. Agora há migrations versionadas (semver ou timestamp) rodadas pelo goose, com `-- prea:down` opcional, geradas a partir dos models na subida (`from_models`) e aplicadas na subida (`on_start`) ou pelo `prea migrate`.
 - **Tags de schema (passo 3):** o model descreve o schema com uma tag por opção (`pk`, `generated`, `size`, `type`, `default`, `unique`, `index`, `fk`, `ondelete`, `version`). Antes:
   - a PK era sempre `id`; agora qualquer campo pode ser PK, inclusive composta, e o `generated` diz se o banco a gera (`auto_increment`, `uuid`, `auto`);
   - o mapeamento *lax* escondia um campo sem coluna; agora o `database.schema: validate` impede a subida quando a tabela não bate com o model. O mapeamento continua *lax* de propósito, porque o estrito quebraria o `select *` com colunas extras;
@@ -137,7 +137,7 @@ Severidade dos gaps: **Crítica** = quebra o isolamento ou a correção do frame
 
 **Resolvidos:**
 - **Código morto em `common`:** o pacote foi removido, junto com o `Stoi64` e o `ThrowException`, que não eram usados. Os erros genéricos (`ErrNotFound`, `ErrUnauthorized`...) foram substituídos: erros de HTTP usam `core.NewError(http.StatusX, msg)`, com as constantes do `net/http`, e cada pacote declara os próprios erros (`database.ErrNotFound`, `database.ErrConflict`, `security.ErrInvalidToken`), que dizem o próprio status (`HTTPStatus()`) ao `core.Error`.
-- **Um módulo só (passo 5):** o framework era um módulo chamado `prea`, sem domínio, e o `core` importava o `database` e o `security`, levando o pgx, o goose e o JWT a todo binário. Agora cada pacote é um módulo em `github.com/prea-framework/prea/<pacote>`, ligados por um `go.work` commitado. O `core` só depende de `di`, `config` e `logger`: os erros dizem o próprio status, e o banco entra pelo gancho `core.App.Setup`. A app de exemplo foi para `example/`, e um CI testa todos os módulos e confere os requires. O registro está em [docs/roadmap/05-modulos-go.md](docs/roadmap/05-modulos-go.md).
+- **Um módulo só (passo 5):** o framework era um módulo chamado `prea`, sem domínio, e o `core` importava o `database` e o `security`, levando o pgx, o goose e o JWT a todo binário. Agora cada pacote é um módulo em `github.com/prea-framework/prea/<pacote>`, ligados por um `go.work` commitado. O `core` só depende de `di`, `config` e `logger`: os erros dizem o próprio status, e o banco entra pelo gancho `core.App.Setup`. A app de exemplo foi para `example/`, e um CI testa todos os módulos e confere os requires.
 
 **Decisões (não são gaps):**
 - A app de exemplo (`example/`) sai do repositório quando virar o template do `prea new` (passo 6).
@@ -147,9 +147,9 @@ Severidade dos gaps: **Crítica** = quebra o isolamento ou a correção do frame
 
 ## Próximos passos
 
-Estão em [docs/roadmap/](docs/roadmap/README.md). Cada gap aberto acima já tem um passo:
-- só Postgres → Prea Persistence ([passo 4](docs/roadmap/04-persistence/README.md));
-- `GetAll` sem limite → specification e paginação ([passo 9](docs/roadmap/04-persistence/specification.md), dentro da persistence);
-- erros de validação crus → [passo 8](docs/roadmap/08-validacao.md);
-- `prea new` e `prea dev` → [passo 6](docs/roadmap/06-prea-go.md);
-- refresh token → [passo 7](docs/roadmap/07-seguranca.md).
+Cada gap aberto acima já tem um passo:
+- só Postgres → Prea Persistence (passo 4);
+- `GetAll` sem limite → specification e paginação (passo 9, dentro da persistence);
+- erros de validação crus → validação de structs (passo 8);
+- `prea new` e `prea dev` → `prea.go` (passo 6);
+- refresh token → lib de segurança (passo 7).
