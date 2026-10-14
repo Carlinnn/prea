@@ -11,13 +11,3 @@ use (
 	./security
 )
 
-// The modules require each other at versions the go command reads from the
-// proxy even in a workspace; these point the unpublished ones at the disk.
-replace (
-	github.com/prea-framework/prea/config v0.0.1 => ./config
-	github.com/prea-framework/prea/core v0.0.1 => ./core
-	github.com/prea-framework/prea/database v0.0.1 => ./database
-	github.com/prea-framework/prea/di v0.0.1 => ./di
-	github.com/prea-framework/prea/logger v0.0.1 => ./logger
-	github.com/prea-framework/prea/security v0.0.1 => ./security
-)

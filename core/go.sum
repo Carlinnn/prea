@@ -66,6 +66,12 @@ github.com/modern-go/reflect2 v1.0.2/go.mod h1:yWuevngMOJpCy52FWWMvUC8ws7m/LJsjY
 github.com/pelletier/go-toml/v2 v2.4.3 h1:GTRvJQutkOSftxIFD5xw9aepkYNuPWmVJpffdDPYVpY=
 github.com/pelletier/go-toml/v2 v2.4.3/go.mod h1:2gIqNv+qfxSVS7cM2xJQKtLSTLUE9V8t9Stt+h56mCY=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
+github.com/prea-framework/prea/config v0.0.1 h1:MFOnPPd/MuUxTtR8y6YrOsmMGeHyijdXZT0gTjb8nuo=
+github.com/prea-framework/prea/config v0.0.1/go.mod h1:Ui3D90L3dLqUzTJfBqqarLKUTe9dv3lbxNm4zsirXvc=
+github.com/prea-framework/prea/di v0.0.1 h1:bgceGeGU8Q3YjqBViGBIpnM6qYv1ggmv1YPfdQ/v1NY=
+github.com/prea-framework/prea/di v0.0.1/go.mod h1:EyTbu9pMrCahREilU1V/7Wo5x6qGXiHAhjA8gMQ9gCM=
+github.com/prea-framework/prea/logger v0.0.1 h1:iPOdN1a9z0Eosyu2XwXDAoHE6Cp+a6OjWoQMelydFnI=
+github.com/prea-framework/prea/logger v0.0.1/go.mod h1:AK5/7nqqsvmzfP6Cr8CDSztQGS4awp2SXSGFre9Twt0=
 github.com/quic-go/go-ossfuzz-seeds v0.1.0 h1:APacT+iIaNF6fd8AGEiN3bT/Jtkd2jz4v4TzM7MFjy0=
 github.com/quic-go/go-ossfuzz-seeds v0.1.0/go.mod h1:3IOHRbJIc+L6YKMwfDtJAM9Vj9k0YY4muhuyUYk5tbk=
 github.com/quic-go/qpack v0.6.0 h1:g7W+BMYynC1LbYLSqRt8PBg5Tgwxn214ZZR34VIOjz8=
