@@ -14,8 +14,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-
-	"github.com/urfave/cli/v3"
 )
 
 const fixtureRegistry = `package preas
@@ -84,7 +82,8 @@ func snapshot(t *testing.T) map[string]string {
 }
 
 func run(args ...string) error {
-	cmd := &cli.Command{Name: "prea", Commands: []*cli.Command{generateCommand()}, Writer: io.Discard, ErrWriter: io.Discard}
+	cmd := app()
+	cmd.Writer, cmd.ErrWriter = io.Discard, io.Discard
 	return cmd.Run(context.Background(), append([]string{"prea"}, args...))
 }
 

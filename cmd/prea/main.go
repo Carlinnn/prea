@@ -9,18 +9,22 @@ import (
 )
 
 func main() {
-	cmd := &cli.Command{
+	if err := app().Run(context.Background(), os.Args); err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		os.Exit(1)
+	}
+}
+
+func app() *cli.Command {
+	return &cli.Command{
 		Name:  "prea",
 		Usage: "Preá framework CLI",
 		Commands: []*cli.Command{
 			runCommand(),
+			buildCommand(),
+			testsCommand(),
 			generateCommand(),
 			migrateCommand(),
 		},
-	}
-
-	if err := cmd.Run(context.Background(), os.Args); err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
-		os.Exit(1)
 	}
 }
