@@ -70,8 +70,8 @@ import (
 	"testing"
 
 	"example.com/app/internal/middleware"
-	"prea/config"
 	"prea/core"
+	"prea/database"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -94,7 +94,7 @@ func TestApp(t *testing.T) {
 		Modules:     Modules,
 		Middlewares: append(slices.Clone(Middlewares), middleware.RateLimit{}, middleware.RequestTiming),
 		Globals:     []any{pool},
-		Config:      config.New("", map[string]any{"database": map[string]any{"schema": schema}}),
+		Setup:       database.Setup(pool, database.Options{Schema: schema}),
 	}.Build(t.Context())
 	if err != nil {
 		t.Fatal(err)

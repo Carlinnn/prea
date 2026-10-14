@@ -9,15 +9,11 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
 	"prea/logger"
 )
-
-// MigrateEnv makes Run run a migrations command instead of serving.
-const MigrateEnv = "PREA_MIGRATE"
 
 // Server configures the HTTP server. Zero fields use the defaults below.
 type Server struct {
@@ -41,14 +37,10 @@ func (s Server) http(handler http.Handler) *http.Server {
 }
 
 // Run serves on addr until SIGINT or SIGTERM, then shuts down gracefully.
-// A second signal stops the process immediately. With PREA_MIGRATE set (by
-// prea migrate), it runs that migrations command instead and returns.
+// A second signal stops the process immediately.
 func (a App) Run(addr string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	if args := os.Getenv(MigrateEnv); args != "" {
-		return a.migrate(ctx, strings.Fields(args))
-	}
 
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {

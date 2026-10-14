@@ -274,7 +274,7 @@ func TestStart(t *testing.T) {
 	opts := Options{Schema: SchemaValidate, Migrations: Migrations{Dir: dir, FromModels: true, OnStart: true}}
 	start := func(opts Options, model any) {
 		t.Helper()
-		if _, err := Start(ctx, pool, opts, []any{model}); err != nil {
+		if _, err := Setup(pool, opts)(ctx, []any{model}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -325,7 +325,7 @@ func TestStart(t *testing.T) {
 		{Options{Schema: SchemaUpdate, Migrations: Migrations{FromModels: true}}, pool, "use schema none or validate with it, not update"},
 		{Options{Migrations: Migrations{OnStart: true}}, nil, "migrations need a database"},
 	} {
-		if _, err := Start(ctx, tc.db, tc.opts, nil); err == nil || !strings.Contains(err.Error(), tc.want) {
+		if _, err := Setup(tc.db, tc.opts)(ctx, nil); err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("got %v, want %q", err, tc.want)
 		}
 	}

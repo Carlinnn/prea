@@ -52,7 +52,7 @@ func runServer(ctx context.Context, cmd *cli.Command, env ...string) error {
 	server := exec.Command(bin)
 	server.Env = append(os.Environ(), env...)
 	if cmd.IsSet("profile") {
-		server.Env = append(server.Env, "PREA_PROFILE="+cmd.String("profile"))
+		server.Env = append(server.Env, "PREA_PROFILE="+cmd.String("profile")) // config.ProfileEnv
 	}
 	server.Stdin, server.Stdout, server.Stderr = os.Stdin, os.Stdout, os.Stderr
 	if err := server.Start(); err != nil {

@@ -8,9 +8,10 @@ import (
 )
 
 // migrateCommand runs the project in inspection mode: the server built with
-// PREA_MIGRATE="<command> [args]" runs the command with its own config and
-// database (core.App.Run) instead of serving. The arguments are checked
-// there, in one place.
+// PREA_MIGRATE="<command> [args]" (database.MigrateEnv, repeated here so the
+// CLI doesn't depend on the database module) runs database.Command with its
+// own config and pool instead of serving. The arguments are checked there,
+// in one place.
 func migrateCommand() *cli.Command {
 	sub := func(name, args, usage string) *cli.Command {
 		return &cli.Command{

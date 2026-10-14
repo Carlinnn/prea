@@ -2,16 +2,16 @@ package core
 
 import (
 	"context"
+	"errors"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
 	"prea/config"
-	"prea/database"
 	"prea/di"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func trace(name string) Middleware {
@@ -278,41 +278,37 @@ func TestConfig(t *testing.T) {
 	}
 }
 
-type keyless struct{ Name string }
-
-func (keyless) Table() string { return "keyless" }
-
-type keylessRepository struct {
-	database.BaseRepository[keyless]
-}
-
-type validRepository struct {
-	database.BaseRepository[valid]
-}
-
-type valid struct{ ID int64 }
-
-func (valid) Table() string { return "valid" }
-
-func TestDatabaseSchema(t *testing.T) {
-	db, err := pgxpool.New(t.Context(), "postgres://nobody@127.0.0.1:1/none") // lazy: never connects here
+func TestSetup(t *testing.T) {
+	var log []string
+	setup := func(_ context.Context, components []any) (func(context.Context) error, error) {
+		if !slices.ContainsFunc(components, func(c any) bool { _, ok := c.(*tracked); return ok }) {
+			t.Errorf("Setup must get every component: %v", components)
+		}
+		log = append(log, "setup")
+		return func(context.Context) error { log = append(log, "teardown"); return nil }, nil
+	}
+	_, closer, err := App{Modules: []*Module{{Name: "m", Providers: []any{tracked{log: &log}}}}, Setup: setup}.Build(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer db.Close()
-	build := func(schema string, providers ...any) error {
-		cfg := config.New("", map[string]any{"database": map[string]any{"schema": schema}})
-		_, _, err := App{Modules: []*Module{{Name: "m", Providers: providers}}, Globals: []any{db}, Config: cfg}.Build(t.Context())
-		return err
+	closer(t.Context())
+	if want := []string{"setup", "init", "close", "teardown"}; !slices.Equal(log, want) {
+		t.Fatalf("order: %v, want %v", log, want)
 	}
 
-	if err := build("none", validRepository{}); err != nil {
-		t.Fatalf("none only reads the tags: %v", err)
+	log = nil
+	failed := tracked{log: &log, failure: errors.New("init failed")}
+	if _, _, err := (App{Modules: []*Module{{Name: "m", Providers: []any{failed}}}, Setup: setup}).Build(t.Context()); err == nil {
+		t.Fatal("a failed Init must fail the build")
 	}
-	if err := build("banana", validRepository{}); err == nil || !strings.Contains(err.Error(), `schema "banana"`) {
-		t.Fatalf("an unknown mode must fail at startup: %v", err)
+	if want := []string{"setup", "init", "teardown"}; !slices.Equal(log, want) {
+		t.Fatalf("a failed Init must undo Setup: %v, want %v", log, want)
 	}
-	if err := build("", keylessRepository{}); err == nil || !strings.Contains(err.Error(), "no primary key") {
-		t.Fatalf("an invalid model must fail at startup: %v", err)
+
+	failing := func(context.Context, []any) (func(context.Context) error, error) {
+		return nil, errors.New("no database")
+	}
+	if _, _, err := (App{Setup: failing}).Build(t.Context()); err == nil || err.Error() != "no database" {
+		t.Fatalf("a failed Setup must stop the startup: %v", err)
 	}
 }

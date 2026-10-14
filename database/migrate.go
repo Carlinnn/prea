@@ -34,7 +34,12 @@ type Migrations struct {
 
 func (o Migrations) dir() string { return cmp.Or(o.Dir, "migrations") }
 
-var errNoDatabase = errors.New("database: migrations need a database (a *pgxpool.Pool in core.App.Globals)")
+var errNoDatabase = errors.New("database: migrations need a database (the pool is nil)")
+
+// MigrateEnv holds a prea migrate command, "<command> [args]": the CLI builds
+// the app and runs it with this set, and the app runs Command with its own
+// config and pool instead of serving.
+const MigrateEnv = "PREA_MIGRATE"
 
 // Options is the database block of the config.
 type Options struct {
@@ -42,32 +47,35 @@ type Options struct {
 	Migrations Migrations `yaml:"migrations"`
 }
 
-// Start prepares the database at startup, in order:
+// Setup prepares the database at startup, as core.App.Setup, in order:
 //  1. migrations.from_models: writes a migration with the diff between the
 //     models and the database, unless migrations are pending;
 //  2. migrations.on_start: applies the pending migrations;
 //  3. schema: syncs the models (see SyncSchema), whose drop it returns.
 //
-// db is the app's main pool, the one the migrations run on.
-func Start(ctx context.Context, db *pgxpool.Pool, opts Options, components []any) (drop func(context.Context) error, err error) {
-	m := opts.Migrations
-	if m.FromModels && slices.Contains([]string{SchemaUpdate, SchemaCreate, SchemaCreateDrop}, opts.Schema) {
-		return nil, fmt.Errorf("database: migrations.from_models writes the models' changes as migrations: use schema none or validate with it, not %s", opts.Schema)
-	}
-	if (m.FromModels || m.OnStart) && db == nil {
-		return nil, errNoDatabase
-	}
-	if m.FromModels {
-		if err := generateMigration(ctx, db, m, components); err != nil {
-			return nil, err
+// db is the app's main pool, the one the migrations run on; components are
+// the app's, where the repositories are.
+func Setup(db *pgxpool.Pool, opts Options) func(ctx context.Context, components []any) (drop func(context.Context) error, err error) {
+	return func(ctx context.Context, components []any) (func(context.Context) error, error) {
+		m := opts.Migrations
+		if m.FromModels && slices.Contains([]string{SchemaUpdate, SchemaCreate, SchemaCreateDrop}, opts.Schema) {
+			return nil, fmt.Errorf("database: migrations.from_models writes the models' changes as migrations: use schema none or validate with it, not %s", opts.Schema)
 		}
-	}
-	if m.OnStart {
-		if err := Command(ctx, db, m, []string{"up"}, logWriter{}); err != nil {
-			return nil, err
+		if (m.FromModels || m.OnStart) && db == nil {
+			return nil, errNoDatabase
 		}
+		if m.FromModels {
+			if err := generateMigration(ctx, db, m, components); err != nil {
+				return nil, err
+			}
+		}
+		if m.OnStart {
+			if err := Command(ctx, db, m, []string{"up"}, logWriter{}); err != nil {
+				return nil, err
+			}
+		}
+		return SyncSchema(ctx, opts.Schema, components)
 	}
-	return SyncSchema(ctx, opts.Schema, components)
 }
 
 // generateMigration writes <next version>_models.sql with what the database
