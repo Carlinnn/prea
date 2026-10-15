@@ -96,7 +96,9 @@ func TestNames(t *testing.T) {
 		"orderItem":    {Pkg: "orderitem", Name: "OrderItem", Table: "order_item", Route: "order-item"},
 		"Order_Item":   {Pkg: "orderitem", Name: "OrderItem", Table: "order_item", Route: "order-item"},
 		"rate_limitBy": {Pkg: "ratelimitby", Name: "RateLimitBy", Table: "rate_limit_by", Route: "rate-limit-by"},
-		"HTTPLog":      {Pkg: "httplog", Name: "HttpLog", Table: "http_log", Route: "http-log"},
+		"HTTPLog":      {Pkg: "httplog", Name: "HTTPLog", Table: "http_log", Route: "http-log"},
+		"api_key":      {Pkg: "apikey", Name: "APIKey", Table: "api_key", Route: "api-key"},
+		"user_id":      {Pkg: "userid", Name: "UserID", Table: "user_id", Route: "user-id"},
 		"a_b_c":        {Pkg: "abc", Name: "ABC", Table: "a_b_c", Route: "a-b-c"},
 	} {
 		want.Framework = frameworkModule

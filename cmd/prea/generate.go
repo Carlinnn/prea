@@ -60,7 +60,11 @@ func names(name string) templateData {
 	}
 	var camel strings.Builder
 	for _, w := range words {
-		camel.WriteString(strings.ToUpper(w[:1]) + w[1:])
+		if initialisms[w] {
+			camel.WriteString(strings.ToUpper(w))
+		} else {
+			camel.WriteString(strings.ToUpper(w[:1]) + w[1:])
+		}
 	}
 	return templateData{
 		Pkg:       strings.Join(words, ""),
@@ -69,6 +73,15 @@ func names(name string) templateData {
 		Route:     strings.Join(words, "-"),
 		Framework: frameworkModule,
 	}
+}
+
+// initialisms keep one case in Go names: APIKey, UserID, HTTPLog.
+var initialisms = map[string]bool{
+	"acl": true, "api": true, "ascii": true, "cpu": true, "css": true, "dns": true,
+	"eof": true, "html": true, "http": true, "https": true, "id": true, "ip": true,
+	"json": true, "jwt": true, "rpc": true, "sla": true, "smtp": true, "sql": true,
+	"ssh": true, "tcp": true, "tls": true, "ttl": true, "udp": true, "ui": true,
+	"uid": true, "uri": true, "url": true, "utf": true, "uuid": true, "xml": true,
 }
 
 // snakeCase splits camel case like the database package does:
