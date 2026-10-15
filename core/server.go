@@ -37,6 +37,10 @@ func (s Server) http(handler http.Handler) *http.Server {
 	}
 }
 
+// ErrShutdownTimeout is the error of Serve when requests were still running
+// after Server.ShutdownTimeout: their connections were closed.
+var ErrShutdownTimeout = errors.New("prea: shutdown timed out: the requests still running were cancelled (server.shutdown_timeout)")
+
 // Run serves on addr until SIGINT or SIGTERM, then shuts down gracefully.
 // A second signal stops the process immediately.
 func (a App) Run(addr string) error {
@@ -95,6 +99,9 @@ func (a App) serve(ctx context.Context, srv *http.Server, ln net.Listener, timeo
 		// Closing the connections cancels the request contexts, so handlers
 		// that use c.Request.Context() stop their queries.
 		srv.Close()
+		if errors.Is(err, context.DeadlineExceeded) {
+			return ErrShutdownTimeout
+		}
 		return fmt.Errorf("prea: shutdown: %w", err)
 	}
 	if err := <-errc; !errors.Is(err, http.ErrServerClosed) {

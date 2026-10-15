@@ -84,8 +84,8 @@ func TestShutdownTimeout(t *testing.T) {
 	<-route.started
 	stop()
 
-	if err := <-done; err == nil {
-		t.Fatal("shutdown past the timeout must report an error")
+	if err := <-done; !errors.Is(err, ErrShutdownTimeout) {
+		t.Fatalf("shutdown past the timeout must report ErrShutdownTimeout: %v", err)
 	}
 	if !<-route.canceled {
 		t.Fatal("request context must be canceled when the server gives up")

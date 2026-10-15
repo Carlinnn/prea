@@ -62,7 +62,14 @@ const configDir = "config"
 // migrate) it runs that migrations command instead of serving.
 func Run(cfg Config) {
 	if err := run(cfg); err != nil {
-		logger.Error("prea: startup failed", "error", err)
+		msg := "prea: startup failed"
+		if _, migrating := os.LookupEnv(database.MigrateEnv); migrating {
+			msg = "prea: migrate failed"
+		}
+		if errors.Is(err, core.ErrShutdownTimeout) {
+			msg = "prea: stopped"
+		}
+		logger.Error(msg, "error", err)
 		os.Exit(1)
 	}
 }
