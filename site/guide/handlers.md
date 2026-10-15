@@ -16,6 +16,8 @@ Any component with a `Register` method gets its routes mounted when the app star
 
 `r.Group("/task")` gives every route of the group the `/task` prefix. The methods (`h.list`, `h.create`...) are plain functions that receive the request's context.
 
+Every `GET` route also answers `HEAD`, with the same headers and no body, as uptime checks and load balancers expect. The whole chain runs once, as for the `GET`. A `HEAD` route you declare yourself takes its place.
+
 The line below the struct makes the compiler check that `Register` has the right signature:
 
 ```go
