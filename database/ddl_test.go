@@ -184,6 +184,12 @@ func TestSyncSchemaChecks(t *testing.T) {
 			t.Errorf("%s: got %v, want %q", tc.mode, err, tc.want)
 		}
 	}
+	// A model that fails to parse reports its own error, without the foreign
+	// key errors that would follow from its missing table.
+	_, err := SyncSchema(ctx, SchemaNone, []any{&invalidRepo{}, &playerRepo{}})
+	if err == nil || !strings.Contains(err.Error(), "no primary key") || strings.Contains(err.Error(), "is not the table") {
+		t.Errorf("parse errors only: %v", err)
+	}
 }
 
 func TestDiffTable(t *testing.T) {

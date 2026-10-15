@@ -107,6 +107,11 @@ func models(components []any) (pools []*pgxpool.Pool, tables map[*pgxpool.Pool][
 		}
 		tables[db] = append(tables[db], t)
 	}
+	// A model that failed to parse has no table yet, so every foreign key to
+	// it would also fail: report only the parse errors.
+	if len(errs) > 0 {
+		return pools, tables, errors.Join(errs...)
+	}
 	for _, db := range pools {
 		sorted, err := ordered(tables[db])
 		if err != nil {
