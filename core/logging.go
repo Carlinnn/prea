@@ -27,7 +27,7 @@ func RequestLogger(c *gin.Context) {
 
 	status := c.Writer.Status()
 	args := []any{
-		"method", c.Request.Method,
+		"method", method(c.Request),
 		"path", c.Request.URL.Path,
 		"status", status,
 		"latency", time.Since(start),

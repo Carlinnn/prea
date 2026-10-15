@@ -81,6 +81,7 @@ func (a App) Build(ctx context.Context) (engine *gin.Engine, closer func(context
 
 func (a App) engine(c *di.Container, root *Module) (*gin.Engine, error) {
 	engine := gin.New()
+	engine.Use(headAsGet(engine)) // first: before Security, so nothing runs twice
 	if err := a.Security.apply(engine); err != nil {
 		return nil, err
 	}
