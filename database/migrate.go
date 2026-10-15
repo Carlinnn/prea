@@ -113,10 +113,12 @@ func generateMigration(ctx context.Context, db *pgxpool.Pool, m Migrations, comp
 	}
 	sql, ok := generated(changes)
 	if !ok {
-		for _, c := range changes {
-			logger.Info("database: " + c.msg)
+		if len(changes) == 0 {
+			logger.Info("database: the models and the database are in sync")
 		}
-		logger.Info("database: the models and the database are in sync")
+		for _, c := range changes { // only what a migration must not do on its own
+			logger.Info("database: " + c.msg + ": left as it is")
+		}
 		return nil
 	}
 	path, err := writeMigration(m, migs, "models", sql)
