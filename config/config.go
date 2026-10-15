@@ -1,4 +1,4 @@
-// Package config loads the application configuration, Spring style:
+// Package config loads the application configuration from profiles:
 // application.yaml is the base and application-<profile>.yaml completes it
 // for the active profile. The environment only enters where the yaml
 // references it, with ${VAR}; the .env file is loaded first, without

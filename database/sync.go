@@ -14,7 +14,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Schema modes, like Hibernate's ddl-auto (config key database.schema).
+// Schema modes: what SyncSchema does with the models' tables at startup
+// (config key database.schema).
 const (
 	SchemaNone       = "none"        // only checks the models' tags
 	SchemaValidate   = "validate"    // the tables must match the models, or the app doesn't start

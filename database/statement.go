@@ -20,7 +20,7 @@ type Conn interface {
 // Args are named parameters, referenced as @name in SQL.
 type Args map[string]any
 
-// Statement is a query with named parameters, PDO style:
+// Statement is a query with named parameters, referenced as @name:
 //
 //	users, err := database.Prepare[User](conn, "select * from users where email = @email").
 //		Bind("email", email).

@@ -7,7 +7,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Transactional is the @Transactional of Preá: embed it in a component and
+// Transactional gives a component transactions: embed it in a component and
 // wrap the methods that must be atomic with Transaction.
 //
 //	type Service struct {

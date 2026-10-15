@@ -193,7 +193,7 @@ func TestRepository(t *testing.T) {
 		t.Fatalf("update: a non-nil pointer writes its zero value: %+v %v", u, err)
 	}
 
-	// JPA style: load, change, save; zero values are written too
+	// load, change, save; zero values are written too
 	loaded, err := repo.GetByID(ctx, a.ID)
 	must(err)
 	loaded.Active, loaded.OwnerID, loaded.Name = true, nil, ""

@@ -23,7 +23,7 @@ type Model interface {
 //
 // Create inserts every field of data. Update is a patch: it skips zero fields,
 // so a DTO with pointer fields (nil = keep) or Args can set zero values. To
-// write the whole entity, zeros included, use Save, like JPA's save/merge.
+// write the whole entity, zeros included, use Save.
 //
 // The id of GetByID, Update and Delete is the key value; with a composite
 // key, it is Args with every key column.
@@ -107,7 +107,7 @@ func (r *BaseRepository[T]) Update(ctx context.Context, id any, data any) (T, er
 	}).One(ctx)
 }
 
-// Save writes every column of entity, zero values included, like JPA's save:
+// Save writes every column of entity, zero values included:
 //   - a zero key inserts, and only the key gets its column default (for the
 //     others, use Create with a DTO);
 //   - a generated key updates the row, or returns ErrNotFound;
