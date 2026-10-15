@@ -34,9 +34,12 @@ func TestBuildAndTests(t *testing.T) {
 		"build":                        "build -o bin/app . | profile=dev",
 		"build -o out/server":          "build -o out/server . | profile=dev",
 		"build -trimpath":              "build -o bin/app -trimpath . | profile=dev",
-		"tests":                        "test ./... | profile=tests",
-		"tests -run TestCreate -v":     "test -run TestCreate -v ./... | profile=tests",
-		"tests -race ./preas/user/...": "test -race ./preas/user/... | profile=tests",
+		"tests":                        "test -p 1 ./... | profile=tests",
+		"tests -run TestCreate -v":     "test -p 1 -run TestCreate -v ./... | profile=tests",
+		"tests -race ./preas/user/...": "test -p 1 -race ./preas/user/... | profile=tests",
+		"tests -p 4":                   "test -p 4 ./... | profile=tests",
+		"tests -p=4 -parallel 8":       "test -p=4 -parallel 8 ./... | profile=tests",
+		"tests -parallel 8":            "test -p 1 -parallel 8 ./... | profile=tests",
 	} {
 		if err := run(strings.Fields(args)...); err != nil {
 			t.Fatalf("prea %s: %v", args, err)

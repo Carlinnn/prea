@@ -36,7 +36,7 @@ func buildCommand() *cli.Command {
 func testsCommand() *cli.Command {
 	return &cli.Command{
 		Name:            "tests",
-		Usage:           "Run the tests with the tests profile; go test flags and packages pass through (default ./...)",
+		Usage:           "Run the tests with the tests profile, one package at a time; go test flags and packages pass through (default ./...)",
 		ArgsUsage:       "[go test flags] [packages]",
 		SkipFlagParsing: true,
 		Action: func(ctx context.Context, cmd *cli.Command) error {
@@ -44,6 +44,14 @@ func testsCommand() *cli.Command {
 			// Packages are paths (./preas/...); flag values like -run TestX are not.
 			if !slices.ContainsFunc(args, func(a string) bool { return strings.HasPrefix(a, ".") }) {
 				args = append(args, "./...")
+			}
+			// One package at a time: they share the tests database, and two
+			// packages creating the same tables at once (schema: create-drop)
+			// collide. An explicit -p wins.
+			// ponytail: serializes every package; a database per test (step 11)
+			// lets them run in parallel again.
+			if !slices.ContainsFunc(args, func(a string) bool { return a == "-p" || strings.HasPrefix(a, "-p=") }) {
+				args = append([]string{"-p", "1"}, args...)
 			}
 			return goRun(ctx, []string{"PREA_PROFILE=tests"}, append([]string{"test"}, args...)...) // config.ProfileEnv
 		},
