@@ -1,15 +1,16 @@
 package {{.Pkg}}
 
 import (
-	"{{.Import}}/dtos"
 	"context"
 	"net/http"
-	"{{.Framework}}/core"
 	"strings"
+
+	"{{.Framework}}/core"
+
+	"{{.Import}}/dtos"
 )
 
-// Service holds the business rules. Return core.NewError(http.Status..., msg)
-// so the handler can pick the HTTP status.
+// Service holds the rules of the {{.Pkg}} preá.
 type Service struct {
 	Repo *Repository `inject:""`
 }

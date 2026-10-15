@@ -1,14 +1,16 @@
 package {{.Pkg}}
 
 import (
-	"{{.Import}}/dtos"
 	"net/http"
+
 	"{{.Framework}}/core"
 
 	"github.com/gin-gonic/gin"
+
+	"{{.Import}}/dtos"
 )
 
-// Handler is the HTTP layer: routes, binding and responses only.
+// Handler serves the /{{.Route}} routes.
 type Handler struct {
 	Service *Service `inject:""`
 }
@@ -16,8 +18,6 @@ type Handler struct {
 var _ core.Router = (*Handler)(nil)
 
 func (h *Handler) Register(r gin.IRouter) {
-	// Middlewares go before the handler: g.GET("", h.Auth.Handle, h.list),
-	// with Auth *middleware.Auth `inject:""` in the Handler struct.
 	g := r.Group("/{{.Route}}")
 	g.GET("", h.list)
 	g.GET("/:id", h.get)

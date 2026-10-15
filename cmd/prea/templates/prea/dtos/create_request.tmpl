@@ -1,6 +1,6 @@
 package dtos
 
-// CreateRequest fields map to {{.Table}} columns (snake_case, or a `db` tag).
+// CreateRequest is the body of POST /{{.Route}}.
 type CreateRequest struct {
 	Name string `json:"name" binding:"required"`
 }
