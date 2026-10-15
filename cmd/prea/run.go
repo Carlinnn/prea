@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -44,7 +45,7 @@ func runServer(ctx context.Context, cmd *cli.Command, env ...string) error {
 	}
 
 	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
+	signal.Notify(signals, stopSignals...)
 	defer signal.Stop(signals)
 
 	server := exec.Command(bin)
@@ -52,19 +53,37 @@ func runServer(ctx context.Context, cmd *cli.Command, env ...string) error {
 	if cmd.IsSet("profile") {
 		server.Env = append(server.Env, "PREA_PROFILE="+cmd.String("profile")) // config.ProfileEnv
 	}
-	server.Stdin, server.Stdout, server.Stderr = os.Stdin, os.Stdout, os.Stderr
+	server.Stdout, server.Stderr = os.Stdout, os.Stderr
+	ownGroup(server)
 	if err := server.Start(); err != nil {
 		return err
 	}
-	go func() {
-		for sig := range signals {
-			// Ctrl+C already reached the server through the terminal's process group.
-			if sig != os.Interrupt {
-				server.Process.Signal(sig)
-			}
+	go forward(signals, server)
+	// The server already logged why it stopped: exit with its code, without
+	// adding "exit status 1".
+	var exit *exec.ExitError
+	if err := server.Wait(); errors.As(err, &exit) {
+		return cli.Exit("", exit.ExitCode())
+	} else if err != nil {
+		return err
+	}
+	return nil
+}
+
+// stopSignals stop the server; the CLI forwards them, since the server runs
+// in its own process group. SIGHUP is the terminal closing.
+var stopSignals = []os.Signal{os.Interrupt, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGQUIT}
+
+// forward passes every signal to server: the first one shuts it down
+// gracefully, a second one stops it at once. SIGHUP becomes SIGTERM, which
+// the server shuts down on.
+func forward(signals <-chan os.Signal, server *exec.Cmd) {
+	for sig := range signals {
+		if sig == syscall.SIGHUP {
+			sig = syscall.SIGTERM
 		}
-	}()
-	return server.Wait()
+		server.Process.Signal(sig)
+	}
 }
 
 // buildServer builds the main package at the project root into bin.

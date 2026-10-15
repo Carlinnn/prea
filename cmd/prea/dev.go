@@ -32,13 +32,13 @@ func devCommand() *cli.Command {
 // After a change, once nothing changed for one more interval, it rebuilds: a
 // good build replaces the running server (SIGTERM, so it shuts down
 // gracefully), a failed one keeps it. It stops the server when ctx ends or on
-// SIGINT/SIGTERM.
+// SIGINT/SIGTERM, which it forwards: the server runs in its own process group.
 //
 // ponytail: polling, not fsnotify (which isn't recursive); a tree walk per
 // interval is cheap at an app's size.
 func dev(ctx context.Context, profile string, interval time.Duration) error {
 	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
+	signal.Notify(signals, stopSignals...)
 	defer signal.Stop(signals)
 	dir, err := os.MkdirTemp("", "prea-dev")
 	if err != nil {
@@ -47,14 +47,10 @@ func dev(ctx context.Context, profile string, interval time.Duration) error {
 	defer os.RemoveAll(dir)
 
 	var server *exec.Cmd
-	interrupted := false
 	defer func() {
-		if interrupted && server != nil {
-			// Ctrl+C already reached the server through the terminal's process
-			// group; a SIGTERM now would be its second signal and stop it
-			// without the graceful shutdown.
-			server.Wait()
-			return
+		if server != nil && server.Process != nil {
+			// While it shuts down, a second Ctrl+C stops it at once.
+			go forward(signals, server)
 		}
 		halt(server)
 	}()
@@ -62,8 +58,7 @@ func dev(ctx context.Context, profile string, interval time.Duration) error {
 		select {
 		case <-ctx.Done():
 			return false
-		case sig := <-signals:
-			interrupted = sig == os.Interrupt
+		case <-signals:
 			return false
 		case <-time.After(interval):
 			return true
@@ -80,6 +75,7 @@ func dev(ctx context.Context, profile string, interval time.Duration) error {
 			server = exec.Command(bin)
 			server.Env = append(os.Environ(), "PREA_PROFILE="+profile) // config.ProfileEnv
 			server.Stdout, server.Stderr = os.Stdout, os.Stderr
+			ownGroup(server)
 			if err := server.Start(); err != nil {
 				return err
 			}
