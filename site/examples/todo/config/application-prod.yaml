@@ -1,0 +1,7 @@
+server:
+  mode: release
+logging:
+  format: json
+database:
+  migrations:
+    on_start: true # apply the committed migrations when the app starts

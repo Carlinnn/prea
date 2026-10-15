@@ -47,3 +47,15 @@ jobs:
             fi
           done
           exit $status
+
+      # The todo app of the tutorial: the code the docs show compiles and passes.
+      # -p 1: its packages share the tests database (create-drop).
+      - name: docs examples
+        working-directory: site/examples/todo
+        env:
+          PREA_PROFILE: tests
+          TEST_DATABASE_URL: ${{ env.PREA_TEST_DATABASE_URL }}
+        run: |
+          test -z "$(gofmt -l .)"
+          go vet ./...
+          go test -race -p 1 ./...

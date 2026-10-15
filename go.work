@@ -9,5 +9,5 @@ use (
 	./di
 	./logger
 	./security
+	./site/examples/todo
 )
-

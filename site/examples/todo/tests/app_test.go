@@ -1,0 +1,60 @@
+// Package tests holds the end-to-end tests: the whole app, with every module,
+// middleware and protection, as main.go starts it. prea tests runs them with
+// the tests profile (config/application-tests.yaml).
+package tests
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"github.com/prea-framework/prea"
+
+	"todo/preas"
+)
+
+func app(t *testing.T) http.Handler {
+	return prea.Test(t, prea.Config{
+		Modules:     preas.Modules,
+		Middlewares: preas.Middlewares,
+		Security:    preas.Security,
+		Logging:     preas.Logging,
+	})
+}
+
+func TestHealth(t *testing.T) {
+	w := httptest.NewRecorder()
+	app(t).ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/health", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET /health: %d %s", w.Code, w.Body)
+	}
+	if w.Header().Get("X-Content-Type-Options") != "nosniff" {
+		t.Fatal("the app's Security must run on every request")
+	}
+}
+
+// #region apikey
+func TestWritesNeedTheKey(t *testing.T) {
+	app := app(t)
+	post := func(key string) int {
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/list", strings.NewReader(`{"name": "Groceries"}`))
+		req.Header.Set("Content-Type", "application/json")
+		if key != "" {
+			req.Header.Set("X-API-Key", key)
+		}
+		app.ServeHTTP(w, req)
+		return w.Code
+	}
+
+	if code := post(""); code != http.StatusUnauthorized {
+		t.Errorf("without the key: %d, want 401", code)
+	}
+	// The key of config/application-tests.yaml.
+	if code := post("tests-key-0123456789"); code != http.StatusCreated {
+		t.Errorf("with the key: %d, want 201", code)
+	}
+}
+
+// #endregion apikey
