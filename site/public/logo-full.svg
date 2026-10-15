@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" width="640" height="640" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="10">
+  <title>preá.go</title>
+  <rect x="0" y="0" width="640" height="640" fill="#2B1F17" stroke="none"/>
+  <path stroke="#E8A83A" d="M158 200Q140 200 140 218V254Q140 270 124 270Q140 270 140 286V322Q140 340 158 340"/>
+  <path stroke="#E8A83A" d="M482 200Q500 200 500 218V254Q500 270 516 270Q500 270 500 286V322Q500 340 482 340"/>
+  <g class="body" stroke="#F3E9DC">
+    <path d="M212 320H398Q416 320 412 302Q398 262 330 251Q252 240 208 268Q192 280 196 302Q199 320 212 320Z"/>
+    <path d="M296 248Q298 234 312 234Q326 234 328 248"/>
+    <path d="M238 320V330M360 320V330"/>
+  </g>
+  <circle cx="376" cy="283" r="6" fill="#E8A83A" stroke="none"/>
+  <text x="320" y="462" text-anchor="middle" stroke="none" font-family="Lexend, 'Arial Rounded MT Bold', ui-rounded, system-ui, sans-serif" font-weight="700" font-size="72" letter-spacing="1"><tspan fill="#F3E9DC">preá</tspan><tspan fill="#E8A83A">.go</tspan></text>
+</svg>

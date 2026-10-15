@@ -1,0 +1,117 @@
+/* Colors from the logo: coffee #2B1F17, cream #F3E9DC, amber #E8A83A. */
+:root {
+  --prea-coffee: #2b1f17;
+  --prea-cream: #f3e9dc;
+  --prea-amber: #e8a83a;
+
+  --vp-c-bg: #fffaf3;
+  --vp-c-bg-alt: #f6eee3;
+  --vp-c-bg-soft: #f3e9dc;
+  --vp-c-bg-elv: #fffdf9;
+  --vp-c-text-1: #2b1f17;
+  --vp-c-text-2: #5c4a3c;
+  --vp-c-text-3: #8a7666;
+  --vp-c-divider: #e6dacb;
+  --vp-c-gutter: #ede2d4;
+
+  /* Darker amber: AA contrast on cream for links and buttons. */
+  --vp-c-brand-1: #8f5d0c;
+  --vp-c-brand-2: #a86d10;
+  --vp-c-brand-3: #b87a14;
+  --vp-c-brand-soft: rgba(232, 168, 58, 0.16);
+
+  --vp-button-brand-text: #fffaf3;
+  --vp-button-brand-bg: #8f5d0c;
+  --vp-button-brand-hover-bg: #a86d10;
+  --vp-button-brand-active-bg: #b87a14;
+
+  --vp-button-alt-text: #2b1f17;
+  --vp-button-alt-bg: #efe4d6;
+  --vp-button-alt-border: #e3d5c3;
+  --vp-button-alt-hover-text: #2b1f17;
+  --vp-button-alt-hover-bg: #e6d8c6;
+  --vp-button-alt-hover-border: #d9c8b3;
+
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(120deg, #2b1f17 55%, #b87a14);
+  --vp-home-hero-image-background-image: radial-gradient(circle, rgba(232, 168, 58, 0.28), transparent 70%);
+  --vp-home-hero-image-filter: blur(56px);
+
+  --vp-font-family-wordmark: 'Lexend', var(--vp-font-family-base);
+}
+
+.dark {
+  --vp-c-bg: #2b1f17;
+  --vp-c-bg-alt: #241a13;
+  --vp-c-bg-soft: #352820;
+  --vp-c-bg-elv: #31251c;
+  --vp-c-text-1: #f3e9dc;
+  --vp-c-text-2: #cbbba8;
+  --vp-c-text-3: #9a8775;
+  --vp-c-divider: #45362b;
+  --vp-c-gutter: #1e1610;
+
+  --vp-c-brand-1: #e8a83a;
+  --vp-c-brand-2: #f0b955;
+  --vp-c-brand-3: #e8a83a;
+  --vp-c-brand-soft: rgba(232, 168, 58, 0.16);
+
+  --vp-button-brand-text: #2b1f17;
+  --vp-button-brand-bg: #e8a83a;
+  --vp-button-brand-hover-bg: #f0b955;
+  --vp-button-brand-active-bg: #d99a2b;
+
+  --vp-button-alt-text: #f3e9dc;
+  --vp-button-alt-bg: #3a2c22;
+  --vp-button-alt-border: #4a392c;
+  --vp-button-alt-hover-text: #f3e9dc;
+  --vp-button-alt-hover-bg: #45352a;
+  --vp-button-alt-hover-border: #574435;
+
+  --vp-home-hero-name-background: linear-gradient(120deg, #f3e9dc 55%, #e8a83a);
+  --vp-code-block-bg: #221911;
+}
+
+/* The wordmark: "preá" plus an amber ".go", as in the logo. */
+.VPNavBarTitle .title {
+  font-family: var(--vp-font-family-wordmark);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+.VPNavBarTitle .title span::after {
+  content: '.go';
+  color: var(--vp-c-brand-1);
+}
+
+.VPHero .name {
+  font-family: var(--vp-font-family-wordmark);
+}
+
+/* "Coming soon" tag next to a title. */
+.soon {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 24px;
+  vertical-align: middle;
+  color: var(--vp-c-brand-1);
+  background: var(--vp-c-brand-soft);
+}
+
+.vp-doc figure {
+  margin: 24px 0;
+}
+.vp-doc figure img {
+  width: 100%;
+  height: auto;
+  border-radius: 12px;
+}
+.vp-doc figcaption {
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--vp-c-text-2);
+}
