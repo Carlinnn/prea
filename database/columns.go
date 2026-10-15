@@ -9,10 +9,18 @@ import (
 	"unicode"
 )
 
+// skip says which struct fields columns leaves out; maps are taken as is.
+type skip int
+
+const (
+	keepAll  skip = iota // Save and filters: every field, nil is null
+	skipNil              // Create: a nil pointer is "not given", so the column default applies
+	skipZero             // Update: a patch, zero fields are not changed
+)
+
 // columns extracts column/value pairs from Args, a map or a struct (or pointer to one).
 // Struct fields map to their `db` tag or snake_cased name; `db:"-"` is skipped.
-// With skipZero, zero-valued struct fields are left out (maps are taken as is).
-func columns(data any, skipZero bool) ([]string, []any, error) {
+func columns(data any, mode skip) ([]string, []any, error) {
 	if args, ok := data.(Args); ok {
 		data = map[string]any(args)
 	}
@@ -35,19 +43,21 @@ func columns(data any, skipZero bool) ([]string, []any, error) {
 
 	var cols []string
 	var vals []any
-	collect(v, skipZero, &cols, &vals)
+	collect(v, mode, &cols, &vals)
 	return cols, vals, nil
 }
 
-func collect(v reflect.Value, skipZero bool, cols *[]string, vals *[]any) {
+func collect(v reflect.Value, mode skip, cols *[]string, vals *[]any) {
 	for i := range v.NumField() {
 		field, value := v.Type().Field(i), v.Field(i)
 
 		if field.Anonymous && field.Type.Kind() == reflect.Struct {
-			collect(value, skipZero, cols, vals)
+			collect(value, mode, cols, vals)
 			continue
 		}
-		if !field.IsExported() || (skipZero && value.IsZero()) {
+		skipped := mode == skipZero && value.IsZero() ||
+			mode == skipNil && value.Kind() == reflect.Pointer && value.IsNil()
+		if !field.IsExported() || skipped {
 			continue
 		}
 

@@ -36,17 +36,29 @@ func TestColumns(t *testing.T) {
 		private string
 	}{Base{7}, "a", "", "x", "y"}
 
-	cols, vals, _ := columns(&data, false)
+	cols, vals, _ := columns(&data, keepAll)
 	if !reflect.DeepEqual(cols, []string{"owner_id", "name", "comment"}) || !reflect.DeepEqual(vals, []any{7, "a", ""}) {
 		t.Fatalf("all: %v %v", cols, vals)
 	}
-	if cols, _, _ := columns(data, true); !reflect.DeepEqual(cols, []string{"owner_id", "name"}) {
+	if cols, _, _ := columns(data, skipZero); !reflect.DeepEqual(cols, []string{"owner_id", "name"}) {
 		t.Fatalf("skip zero: %v", cols)
 	}
-	if cols, vals, _ := columns(Args{"b": 0, "a": nil}, true); !reflect.DeepEqual(cols, []string{"a", "b"}) || !reflect.DeepEqual(vals, []any{nil, 0}) {
+	if cols, vals, _ := columns(Args{"b": 0, "a": nil}, skipZero); !reflect.DeepEqual(cols, []string{"a", "b"}) || !reflect.DeepEqual(vals, []any{nil, 0}) {
 		t.Fatalf("args keep zero values, sorted: %v %v", cols, vals)
 	}
-	if _, _, err := columns(42, false); err == nil {
+	var none *int
+	withNil := struct {
+		Name  string
+		Owner *int
+		Note  *string
+	}{"", none, new(string)}
+	if cols, vals, _ := columns(withNil, skipNil); !reflect.DeepEqual(cols, []string{"name", "note"}) || vals[0] != "" {
+		t.Fatalf("skip nil keeps zero values and set pointers, drops nil ones: %v %v", cols, vals)
+	}
+	if cols, _, _ := columns(withNil, keepAll); len(cols) != 3 {
+		t.Fatalf("keep all writes nil as null: %v", cols)
+	}
+	if _, _, err := columns(42, keepAll); err == nil {
 		t.Fatal("non struct must fail")
 	}
 }
@@ -467,5 +479,42 @@ func TestErrorStatus(t *testing.T) {
 		if got := err.(interface{ HTTPStatus() int }).HTTPStatus(); got != want {
 			t.Errorf("%v: %d, want %d (core.Error replies with it)", err, got, want)
 		}
+	}
+}
+
+type badge struct {
+	ID    int64  `pk:"" generated:"auto_increment"`
+	Code  string `size:"2"`
+	Role  string `default:"member"`
+	Level *int16
+}
+
+func (badge) Table() string { return "badges" }
+
+// Create leaves out nil pointers, so the column default applies, and data
+// errors (too long, out of range) are invalid input, not a 500.
+func TestCreateDefaultsAndDataErrors(t *testing.T) {
+	ctx := context.Background()
+	repo := &BaseRepository[badge]{}
+	testDB(t, repo)
+
+	type create struct {
+		Code  string
+		Role  *string
+		Level *int16
+	}
+	g, err := repo.Create(ctx, create{Code: "BR"})
+	if err != nil || g.Role != "member" || g.Level != nil {
+		t.Fatalf("a nil pointer must take the column default: %+v %v", g, err)
+	}
+	captain := "captain"
+	if g, err := repo.Create(ctx, create{Code: "AR", Role: &captain}); err != nil || g.Role != "captain" {
+		t.Fatalf("a set pointer is written: %+v %v", g, err)
+	}
+	if _, err := repo.Create(ctx, create{Code: "BRA"}); !errors.Is(err, ErrInvalidInput) {
+		t.Errorf("too long: %v, want ErrInvalidInput", err)
+	}
+	if _, err := Prepare[int64](repo.DB, "select 100000::int2").One(ctx); !errors.Is(err, ErrInvalidInput) {
+		t.Errorf("out of range: %v, want ErrInvalidInput", err)
 	}
 }

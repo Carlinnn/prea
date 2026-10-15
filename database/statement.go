@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -111,10 +113,11 @@ func translate(err error) error {
 
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
-		switch pgErr.Code {
-		case "23505": // unique_violation
+		switch {
+		case pgErr.Code == "23505": // unique_violation
 			return fmt.Errorf("%w: %s", ErrConflict, pgErr.Message)
-		case "22P02", "23502", "23503", "23514": // bad text representation, not null, foreign key, check
+		case strings.HasPrefix(pgErr.Code, "22"), // data exception: malformed, too long, out of range...
+			slices.Contains([]string{"23502", "23503", "23514"}, pgErr.Code): // not null, foreign key, check
 			return fmt.Errorf("%w: %s", ErrInvalidInput, pgErr.Message)
 		}
 	}

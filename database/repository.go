@@ -21,7 +21,8 @@ type Model interface {
 // and write custom queries with r.Prepare. The primary key, the generated
 // columns and the version come from the model's tags (see the package doc).
 //
-// Create inserts every field of data. Update is a patch: it skips zero fields,
+// Create inserts every field of data, except nil pointers, which get the
+// column default (null when there is none). Update is a patch: it skips zero fields,
 // so a DTO with pointer fields (nil = keep) or Args can set zero values. To
 // write the whole entity, zeros included, use Save.
 //
@@ -73,7 +74,7 @@ func (r *BaseRepository[T]) First(ctx context.Context, filter Args) (T, error) {
 
 func (r *BaseRepository[T]) Create(ctx context.Context, data any) (T, error) {
 	return r.query(func(t *table, s *Statement[T]) (string, error) {
-		cols, vals, err := columns(data, false)
+		cols, vals, err := columns(data, skipNil)
 		if err != nil {
 			return "", err
 		}
@@ -85,7 +86,7 @@ func (r *BaseRepository[T]) Create(ctx context.Context, data any) (T, error) {
 // is incremented.
 func (r *BaseRepository[T]) Update(ctx context.Context, id any, data any) (T, error) {
 	return r.query(func(t *table, s *Statement[T]) (string, error) {
-		cols, vals, err := columns(data, true)
+		cols, vals, err := columns(data, skipZero)
 		if err != nil {
 			return "", err
 		}
@@ -123,7 +124,7 @@ func (r *BaseRepository[T]) Save(ctx context.Context, entity T) (T, error) {
 	if err != nil {
 		return entity, err
 	}
-	cols, vals, err := columns(entity, false)
+	cols, vals, err := columns(entity, keepAll)
 	if err != nil {
 		return entity, err
 	}
@@ -193,7 +194,7 @@ func where(param func(any) string, filter Args) string {
 	if len(filter) == 0 {
 		return ""
 	}
-	cols, vals, _ := columns(filter, false)
+	cols, vals, _ := columns(filter, keepAll)
 	conds := make([]string, len(cols))
 	for i, col := range cols {
 		if vals[i] == nil {
