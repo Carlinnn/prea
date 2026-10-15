@@ -58,7 +58,7 @@ create table if not exists "players" (
 	"team_id" int8 references "app"."teams" on delete cascade,
 	"first" text not null,
 	"last" text not null default 'o''neil',
-	"mentor_id" text references "players",
+	"mentor_id" uuid references "players",
 	"rev" int8 not null default 0,
 	primary key ("id")
 );
@@ -66,7 +66,7 @@ alter table "players" add column if not exists "id" uuid not null default gen_ra
 alter table "players" add column if not exists "team_id" int8 references "app"."teams" on delete cascade;
 alter table "players" add column if not exists "first" text not null;
 alter table "players" add column if not exists "last" text not null default 'o''neil';
-alter table "players" add column if not exists "mentor_id" text references "players";
+alter table "players" add column if not exists "mentor_id" uuid references "players";
 alter table "players" add column if not exists "rev" int8 not null default 0;
 create unique index if not exists "players_full_name_key" on "players" ("first", "last");
 create index if not exists "players_team_id_idx" on "players" ("team_id")`
@@ -103,11 +103,45 @@ func (cycleB) Table() string      { return "cycle_b" }
 func (orphan) Table() string      { return "orphans" }
 func (toComposite) Table() string { return "to_composite" }
 
+type (
+	list struct {
+		ID string `pk:"" generated:"uuid"`
+	}
+	task struct {
+		ID     int64
+		ListID *string `fk:"lists"`
+	}
+	mistyped struct {
+		ID     int64
+		ListID *string `type:"text" fk:"lists"`
+	}
+)
+
+func (list) Table() string     { return "lists" }
+func (task) Table() string     { return "tasks" }
+func (mistyped) Table() string { return "mistyped" }
+
+// A foreign key column takes the type of the key it references, in a copy:
+// the cached schema keeps the type of the Go field.
+func TestOrderedForeignKeyType(t *testing.T) {
+	sorted, err := ordered(schemasOf(t, reflect.TypeFor[task](), reflect.TypeFor[list]()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := sorted[1].columns[1].definition(); got != `"list_id" uuid references "lists"` {
+		t.Errorf("got %s", got)
+	}
+	if cached := schemasOf(t, reflect.TypeFor[task]())[0].columns[1].sqlType; cached != "text" {
+		t.Errorf("the cached schema changed to %s", cached)
+	}
+}
+
 func TestOrderedErrors(t *testing.T) {
 	for want, types := range map[string][]reflect.Type{
-		"foreign key cycle: cycle_a -> cycle_b -> cycle_a":      {reflect.TypeFor[cycleA](), reflect.TypeFor[cycleB]()},
-		`fk:"nowhere" is not the table of a repository's model`: {reflect.TypeFor[orphan]()},
-		`fk:"memberships" has a composite key`:                  {reflect.TypeFor[toComposite](), reflect.TypeFor[membership]()},
+		"foreign key cycle: cycle_a -> cycle_b -> cycle_a":             {reflect.TypeFor[cycleA](), reflect.TypeFor[cycleB]()},
+		`fk:"nowhere" is not the table of a repository's model`:        {reflect.TypeFor[orphan]()},
+		`fk:"memberships" has a composite key`:                         {reflect.TypeFor[toComposite](), reflect.TypeFor[membership]()},
+		`mistyped.list_id: type:"text" doesn't match lists.id, a uuid`: {reflect.TypeFor[mistyped](), reflect.TypeFor[list]()},
 	} {
 		if _, err := ordered(schemasOf(t, types...)); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("got %v, want %q", err, want)

@@ -46,7 +46,7 @@ func TestSchemaColumns(t *testing.T) {
 		{name: "profile", sqlType: "int2", def: "1"},
 		{name: "title", sqlType: "text", def: "'it''s'"},
 		{name: "active", sqlType: "bool", def: "true"},
-		{name: "data", sqlType: "jsonb"},
+		{name: "data", sqlType: "jsonb", typed: true},
 		{name: "last_seen", sqlType: "timestamptz", nullable: true},
 		{name: "rev", sqlType: "int8", version: true},
 	}

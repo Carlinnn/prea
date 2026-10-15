@@ -127,6 +127,9 @@ func (t *table) indexes() []index {
 
 // ordered sorts tables so each comes after the tables its foreign keys
 // reference, and checks that they reference a model's single column key.
+// A foreign key column takes the type of the key it references (a uuid key
+// makes a *string fk a uuid); the returned tables are copies with those
+// types, so the cached schemas are never changed.
 //
 // ponytail: foreign keys are inline, so a cycle between tables is an error;
 // split them into "alter table ... add constraint" if someone needs one.
@@ -137,6 +140,7 @@ func ordered(tables []*table) ([]*table, error) {
 	}
 	const visiting, done = 1, 2
 	state := map[*table]int{}
+	resolved := map[*table]*table{}
 	var sorted []*table
 	var visit func(t *table, path []string) error
 	visit = func(t *table, path []string) error {
@@ -147,22 +151,40 @@ func ordered(tables []*table) ([]*table, error) {
 			return fmt.Errorf("database: foreign key cycle: %s", strings.Join(append(path, t.name), " -> "))
 		}
 		state[t] = visiting
-		for _, c := range t.columns {
+		out := t
+		for i, c := range t.columns {
 			ref, ok := byName[c.fk]
 			switch {
-			case c.fk == "" || ref == t:
+			case c.fk == "":
 				continue
 			case !ok:
 				return fmt.Errorf("database: %v.%s: fk:%q is not the table of a repository's model", t.typ, c.name, c.fk)
 			case len(ref.pk()) != 1:
 				return fmt.Errorf("database: %v.%s: fk:%q has a composite key", t.typ, c.name, c.fk)
 			}
-			if err := visit(ref, append(path, t.name)); err != nil {
-				return err
+			if ref != t {
+				if err := visit(ref, append(path, t.name)); err != nil {
+					return err
+				}
+				ref = resolved[ref]
 			}
+			key := ref.pk()[0]
+			if c.sqlType == key.sqlType && c.size == key.size {
+				continue
+			}
+			if c.typed {
+				return fmt.Errorf("database: %v.%s: type:%q doesn't match %s.%s, a %s", t.typ, c.name, c.sqlType, ref.name, key.name, typeName(key.sqlType, key.size))
+			}
+			if out == t {
+				copied := *t
+				copied.columns = slices.Clone(t.columns)
+				out = &copied
+			}
+			out.columns[i].sqlType, out.columns[i].size = key.sqlType, key.size
 		}
 		state[t] = done
-		sorted = append(sorted, t)
+		resolved[t] = out
+		sorted = append(sorted, out)
 		return nil
 	}
 	for _, t := range tables {

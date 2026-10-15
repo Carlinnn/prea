@@ -32,6 +32,7 @@ type table struct {
 type column struct {
 	name      string
 	sqlType   string // Postgres udt_name: text, varchar, int8, uuid...
+	typed     bool   // the type came from a type tag
 	size      int    // varchar(size)
 	nullable  bool
 	pk        bool
@@ -196,7 +197,7 @@ func parseColumn(field reflect.StructField, name string) (column, error) {
 		if typ == "" {
 			return c, fmt.Errorf(`type needs a Postgres type, e.g. type:"jsonb"`)
 		}
-		c.sqlType = strings.ToLower(typ)
+		c.sqlType, c.typed = strings.ToLower(typ), true
 	}
 	if c.sqlType == "" {
 		return c, fmt.Errorf(`no column type for %v: set one with type:"..."`, goType)
