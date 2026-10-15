@@ -4,6 +4,29 @@ What each version brought. Preá is pre-alpha, and the API may change between ve
 
 Each module has its own version. The CLI and the root module follow the newest one.
 
+## v0.0.3
+
+*October 2026*
+
+**HTTP**
+- `GET` routes also answer `HEAD`, with the same headers and no body.
+- A shutdown that runs past `server.shutdown_timeout` returns `core.ErrShutdownTimeout`, with a message that says what happened.
+
+**Database**
+- A foreign key column takes the type of the key it references: `ListID *string` with `fk:"list"` is a `uuid` column, with no `type` tag.
+- `Create` leaves nil pointers out, so the column default applies.
+- A value too long for its column, out of range or an invalid date is a 400, like other bad input.
+- An invalid model reports only its own errors, without the foreign key errors that followed from it.
+
+**CLI**
+- `prea tests` runs one package at a time: the packages share the test database.
+- `prea run` and `prea dev` forward every stop signal to the app, so an IDE's stop button, `kill` or a closing terminal stop it gracefully.
+- Generated names follow Go initialisms (`APIKey`), and the generated code is shorter, with grouped imports.
+
+**Docs**
+- This site, the tutorial and runnable examples on pkg.go.dev.
+- Preá is now under the MIT License.
+
 ## v0.0.2
 
 *October 2026*
