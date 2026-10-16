@@ -17,7 +17,7 @@ hash, err := security.HashPassword(req.Password)       // store hash
 ok, err := security.ComparePassword(req.Password, hash) // true if it matches
 ```
 
-The hash uses argon2id, with a random salt per password. Two users with the same password get different hashes.
+The hash uses argon2id, with a random salt per password. Two users with the same password get different hashes. Passwords longer than 128 bytes are rejected with `security.ErrPasswordTooLong` before hashing, so a huge body cannot burn CPU and memory.
 
 ## Tokens
 
