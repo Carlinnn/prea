@@ -27,6 +27,14 @@ jobs:
 
       # Every module of go.work: ./... at the root covers only the root module.
       - run: go vet github.com/prea-framework/prea/...
+
+      # The cmd/prea tests create projects offline (GOPROXY=off): fill the
+      # module cache with what their go mod tidy needs.
+      - name: warm the module cache
+        run: |
+          go build -o "$RUNNER_TEMP/prea" github.com/prea-framework/prea/cmd/prea
+          cd "$RUNNER_TEMP" && ./prea new warm --with-db --local "$GITHUB_WORKSPACE"
+
       - run: go test -race github.com/prea-framework/prea/...
 
       # In a workspace an import compiles even without a require, so check that
