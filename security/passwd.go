@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -24,14 +25,34 @@ const (
 	Time    = 1
 	Threads = 4
 	KeyLen  = 32
+	// MaxPasswordLen is the longest password HashPassword and ComparePassword
+	// accept, in bytes. Longer input is rejected before argon2 runs, so a
+	// huge body cannot burn CPU and memory on hashing.
+	MaxPasswordLen = 128
 )
 
+// ErrPasswordTooLong is returned when a password exceeds MaxPasswordLen.
+var ErrPasswordTooLong = errors.New("password too long")
+
 func HashPassword(passwd string) (string, error) {
+	if err := checkPasswordLen(passwd); err != nil {
+		return "", err
+	}
 	return argon2Encoded(passwd, Argon{SaltLen, Mem, Time, Threads, KeyLen})
 }
 
 func ComparePassword(passwd string, hashed string) (bool, error) {
+	if err := checkPasswordLen(passwd); err != nil {
+		return false, err
+	}
 	return argon2Compare(passwd, hashed)
+}
+
+func checkPasswordLen(passwd string) error {
+	if len(passwd) > MaxPasswordLen {
+		return ErrPasswordTooLong
+	}
+	return nil
 }
 
 func genSalt(num uint) ([]byte, error) {
